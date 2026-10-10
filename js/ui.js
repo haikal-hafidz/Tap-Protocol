@@ -91,6 +91,7 @@ export function createApp(root, deps) {
       <header class="setup-head"><h1>TAP Protocol</h1><p>A life journal inside an open-ended text RPG. Create Pithe, your fictional counterpart, and step into the Harbor Quarter. Everything is stored in this browser. Nothing is sent anywhere.</p></header>
       ${app.recovered ? '<p class="notice">Your main save was damaged and the previous backup was restored.</p>' : ''}
       ${app.errors.length ? `<ul class="errors" role="alert">${app.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
+      ${deps.cloudPanel ? deps.cloudPanel() : ''}
       <form data-form="create" class="stack" novalidate>
         <fieldset class="window"><legend>Identity</legend>
           <label>Character name<input name="name" maxlength="30" value="${esc(d.name ?? 'Pithe')}"></label>
@@ -158,7 +159,8 @@ export function createApp(root, deps) {
         <div class="row"><button class="btn" data-action="export">Export save file</button></div>
         <form data-form="import" class="stack"><label>Import a save (paste JSON). This replaces the current game.<textarea name="json" rows="3"></textarea></label>${app.importError ? `<p class="error">${esc(app.importError)}</p>` : ''}<button class="btn" type="submit">Import save</button></form>
         <form data-form="reset" class="stack"><label>Delete this save. Type RESET to confirm.<input name="confirm" autocomplete="off"></label>${app.resetError ? `<p class="error">${esc(app.resetError)}</p>` : ''}<button class="btn danger" type="submit">Delete save</button></form>
-      </section>`;
+      </section>
+      ${deps.cloudPanel ? deps.cloudPanel() : ''}`;
   }
 
   function journalView(s) {
@@ -396,6 +398,22 @@ export function createApp(root, deps) {
   root.addEventListener('submit', onSubmit);
   root.addEventListener('keydown', onKeydown);
 
+  // Used by cloud sync only: swap in a save downloaded from the cloud and write it to this device.
+  // It saves through saveLocalOnly so the write cannot start another upload.
+  // `guard` (optional) must still be true when the write starts AND when it finishes, otherwise the player acted in
+  // the meantime and nothing is replaced (their newer change is saved by the normal save already queued behind us).
+  const changedMeanwhile = () => { const e = new Error('The game changed while the cloud save was being loaded. Nothing was replaced.'); e.code = 'LOCAL_CHANGED'; return e; };
+  app.applyRemote = (state, guard) => {
+    const p = app.chain.then(() => { if (guard && !guard()) throw changedMeanwhile(); return (deps.saveLocalOnly || deps.save)(state); }).then((r) => {
+      if (!r || !r.ok) throw new Error('Could not save the cloud copy on this device' + (r && r.error ? ': ' + r.error : '') + '.');
+      if (guard && !guard()) throw changedMeanwhile();
+      app.state = state; app.pending = null; app.talkNpc = null;
+      app.report = { ok: true, title: 'Cloud save loaded', narrative: [], notes: ['Your progress from the cloud is now on this device.'], changes: [] };
+      app.saveStatus = 'Loaded from the cloud'; render();
+    });
+    app.chain = p.catch(() => {});   // a failed cloud apply must never stall later local saves
+    return p;
+  };
   app.render = render; app.settle = settle; app.persist = persist;
   return app;
 }

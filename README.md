@@ -57,9 +57,12 @@ How to check that offline really works:
 
 Nothing in the game needs the network. It never makes a request to any other site (a test checks this).
 
+## Cloud sync (optional)
+Sign in under Character, Cloud sync to keep one save on all your devices. It is off until `js/config.js` has a Supabase Project URL and Publishable key. Local saves stay the source of truth offline; if two devices diverge the game shows a conflict screen and backs up both versions before anything is overwritten. Setup: `docs/SUPABASE_SETUP.md`. Tests: `npm run test:sync`, `npm run test:sync-browser`, `npm run test:rls`.
+
 ## Move a save between devices
 
-There is no cloud sync. Saves are local to each browser. To move progress:
+Without cloud sync (see above), saves are local to each browser. To move progress by hand:
 
 1. On the old device: Character, Settings, "Export save file". This downloads `tap-protocol-save-YYYY-MM-DD.json`.
 2. Move that file to the other device (email, cloud drive, USB, whatever you trust).
@@ -96,7 +99,7 @@ The tests are the only part that needs npm packages (dev only: jsdom, fake-index
     npm install
     npm test                 # 34 fast tests (rules, storage, jsdom UI flow, PWA files, emoji scan)
     npm run test:browser     # 19 real-browser tests (Chromium via Playwright), including offline play
-    npm run test:all         # both
+    npm run test:all         # everything: fast, browser, sync (stand-in server), database rules, sync in browser
 
 The browser tests need a Chromium that Playwright can find. If Playwright has none, run `npx playwright install chromium` once, or set `CHROMIUM_PATH=/path/to/chrome`. Set `TAP_ONLY=offline` (any regular expression) to run only matching tests, and `TAP_SHOTS=/some/dir` to save screenshots of the layout checks.
 

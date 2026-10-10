@@ -163,3 +163,12 @@ main:focus { outline: none; }
 /* update prompt (shown by js/pwa.js) */
 .update-banner { position: fixed; top: 0; left: 0; right: 0; z-index: 20; display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: center; justify-content: center; padding: 0.6rem 1rem; background: #17202b; border-bottom: 1px solid var(--sys-dim); font-size: 0.9rem; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* ---- cloud sync panel and conflict dialog ---- */
+.cloud-status { font-weight: 600; margin: .4rem 0 .2rem; }
+.cloud-status.bad { color: var(--danger); }
+.modal.wide { max-width: 44rem; width: calc(100% - 2rem); max-height: calc(100% - 2rem); overflow: auto; }
+.cloud-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: .8rem 0; }
+.cloud-side { border: 1px solid var(--edge); border-radius: 8px; padding: .6rem .8rem; }
+.cloud-side h3 { margin: 0 0 .4rem; }
+@media (max-width: 560px) { .cloud-sides { grid-template-columns: 1fr; } }

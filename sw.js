@@ -6,7 +6,7 @@
 // If any file fails to download, the install fails and the old version stays active and intact.
 // The new version waits until the player accepts the update prompt (or closes all tabs), then old caches are deleted.
 
-const CACHE_VERSION = 'a35c23e5dad9';
+const CACHE_VERSION = '1e2f8f7c25fb';
 const CACHE_PREFIX = 'tap-protocol-';
 const CACHE = CACHE_PREFIX + CACHE_VERSION;
 
@@ -16,11 +16,15 @@ const PRECACHE = [
   'index.html',
   'manifest.webmanifest',
   'css/style.css',
+  'js/cloud-ui.js',
+  'js/cloud.js',
+  'js/config.js',
   'js/data.js',
   'js/main.js',
   'js/pwa.js',
   'js/rules.js',
   'js/storage.js',
+  'js/sync.js',
   'js/ui.js',
   'icons/apple-touch-icon.png',
   'icons/favicon-32.png',
@@ -66,6 +70,21 @@ self.addEventListener('fetch', (event) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // js/config.js holds the owner's Supabase key. It is served network-first (cache only when offline), so filling in
+  // the key never needs a cache re-stamp and a phone cannot keep an old, empty copy of it.
+  if (url.origin + url.pathname === abs('js/config.js')) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE);
+      try {
+        const ctl = new AbortController(); const timer = setTimeout(() => ctl.abort(), 4000);
+        const res = await fetch(new Request(abs('js/config.js'), { cache: 'no-cache', signal: ctl.signal })).finally(() => clearTimeout(timer));
+        if (res.ok && !res.redirected) { await cache.put(abs('js/config.js'), res.clone()); return res; }
+      } catch (err) { /* offline or slow: use the cached copy below */ }
+      const hit = await cache.match(abs('js/config.js'));
+      return hit || Response.error();
+    })());
+    return;
+  }
   event.respondWith((async () => {
     const hit = await caches.match(req, { cacheName: CACHE, ignoreSearch: true });
     if (hit) return hit;

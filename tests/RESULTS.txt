@@ -1,8 +1,4 @@
 
-> tap-protocol@0.2.0 test
-> node tests/run.mjs
-
-
 == Rules ==
 PASS  character creation validates input
 PASS  background sets attributes (base 3 plus 6 bonus points) and starts hardcore
@@ -37,14 +33,16 @@ PASS  drive the whole sample quest through the UI
 PASS  hardcore warning modal appears before a costly action and can be cancelled
 PASS  journal entry and tracker goal through the UI
 PASS  REFRESH: reload the app and verify everything persisted
+PASS  CLOUD APPLY GUARD (real ui.js): a cloud save is not applied if the player acted meanwhile; a clean apply works and is saved locally
 
 == PWA files (static) ==
 PASS  manifest: valid JSON with the required install fields and real icon files of the declared size
 PASS  service worker: precache list matches the real runtime files exactly (nothing invented, nothing missing)
 PASS  service worker: CACHE_VERSION is current (hash of the precached files), so a changed file cannot ship under an old cache
 PASS  app code makes no remote requests (no quoted or url() http(s) references in html, css, js)
+PASS  config.js: only a Supabase project URL and a Publishable key (never a Secret / service_role key)
 
 == Emoji scan ==
 PASS  no emoji characters anywhere in the project (text files, file names, and PNG metadata)
 
-34 passed, 0 failed
+36 passed, 0 failed

@@ -1,0 +1,40 @@
+PASS  decide(): every row of the decision table
+PASS  hashState(): ignores key order (jsonb reorders keys) but notices every value change
+PASS  parseAuthFragment() / redirectUrl() for the GitHub Pages sub-path
+PASS  sign-up with email confirmation on: no session until the link is used; wrong password rejected
+PASS  first sign-in uploads the local save (revision 1); the cloud copy equals it
+PASS  new device with no save: offers Restore, never fills silently; restoring does not re-upload
+PASS  new device whose save is IDENTICAL to the cloud: linked silently, nothing written
+PASS  edit on A pushes (revision 2); B (unchanged) pulls it; no loop afterwards
+PASS  burst of edits is merged into one write (debounce + single flight)
+PASS  edit made WHILE a push is in flight is not lost and not duplicated
+PASS  both devices changed: conflict screen state, NOTHING written, both versions backed up
+PASS  resolve "keep cloud": local replaced, a backup exists, no upload
+PASS  resolve "keep this device": cloud replaced via compare-and-set (revision +1), cloud version stays in a backup
+PASS  cloud changes AGAIN while the conflict screen is open: the choice is not applied blindly
+PASS  two devices push from the same revision at once: exactly one wins, the other gets a conflict (never an overwrite)
+PASS  raw compare-and-set: of two updates with the same expected revision exactly one succeeds
+PASS  cloud revision went BACKWARDS (row replaced/restored): conflict, never a silent pull
+PASS  RESET then a new game: meets the old cloud save as a conflict, never silently replaces it
+PASS  offline edits: queued as ONE write after reconnect; no duplicates, no loop
+PASS  network drop mid-sync: local save untouched, phase offline, retry scheduled with backoff, recovers
+PASS  server errors (500, 503, 401 on data): clear message, local save untouched, retry works
+PASS  expired access token: refreshed once automatically, request retried, no sign-out
+PASS  session fully expired (refresh rejected): signed out with a message, local save kept
+PASS  sign-out clears only the session; local save and cloud row unchanged; sign back in resumes without conflict
+PASS  a different account on the same device: its first sync is NOT silent (adopt) and account A's row is untouched
+PASS  unreadable / hostile cloud payload: error shown, nothing applied, local save untouched
+PASS  a failed local write while applying a cloud save leaves the old state in place (no half-apply)
+PASS  rewards are never paid twice: sync only swaps whole saves and never runs game rules
+PASS  older cloud save (less game time) is NEVER pulled silently, even if this device has no unsynced change
+PASS  a newer cloud save (more game time) still arrives by itself (the normal laptop-to-phone case)
+PASS  RACE: the player acts at the exact moment a cloud save is being applied: their change is kept, nothing is replaced
+PASS  RACE on Restore: a character created in the meantime is not replaced by the cloud save
+PASS  RACE on "Keep the cloud save": playing after the backup cancels the replace and asks again
+PASS  Create account for an email that already has an account: clear message, not a silent "check your email"
+PASS  a Secret / service_role key in config is refused: cloud sync stays off and nothing is sent anywhere
+PASS  secret keys: no service-role / secret key anywhere in the shipped files
+PASS  v0.2.2: the cloud moves in the instant between "Keep this device" and its write: nothing is written and the conflict dialog comes back (not a dead end)
+PASS  v0.2.2: a save that keeps changing during sync is not stuck on "Syncing" and the latest version still reaches the cloud (guard test; it also passes on v0.2.1)
+
+38 passed, 0 failed

@@ -2,7 +2,7 @@
 
 Status: Phase 1 vertical slice, now an installable offline-first PWA. The earlier audit fixes remain. Phase 2 has not been started and no game mechanics, narrative, data or save schema changed in this round.
 
-Automated results (details and environment under "Test results"): 34 of 34 fast tests pass (`npm test`), 19 of 19 real-browser tests pass (`npm run test:browser`, Chromium 141 through Playwright), including offline play with the server stopped and the browser offline.
+Automated results (details and environment under "Test results"): 36 of 36 fast tests pass (`npm test`, revision 0.2.2), 19 of 19 real-browser tests pass (`npm run test:browser`, Chromium 141 through Playwright), including offline play with the server stopped and the browser offline.
 
 ## Changes in this round (PWA finalization)
 
@@ -25,6 +25,35 @@ Changed:
 Not changed (verified byte-identical to the original archive): js/rules.js, js/data.js, js/storage.js. So the save schema, storage keys, checksum, backup, export/import format and all game rules are exactly as before.
 
 Deleted: nothing.
+
+## Cloud save round (Supabase, optional)
+New: `js/config.js`, `js/cloud.js` (fetch client), `js/sync.js` (engine), `js/cloud-ui.js` (panel + conflict dialog), `supabase/schema.sql`, `docs/SUPABASE_SETUP.md`, `tests/sync.mjs`, `tests/sync-browser.mjs`, `tests/rls.mjs`, `tests/sync-mock-server.mjs`.
+Edited: `js/main.js` (wiring), `js/ui.js` (panel placement, `applyRemote`), `css/style.css`, `sw.js` (precache list + stamp), `package.json`, README, this file. Untouched: `rules.js`, `data.js`, `storage.js`, `pwa.js`.
+Sync bookkeeping lives in its own IndexedDB database `tap-protocol-sync` (session, last-synced revision/hash, conflict backups), so RESET does not erase conflict backups and the save schema is unchanged.
+(Superseded by the audit round below: every suite has now been run. Nothing has been run against a real Supabase project.)
+
+## Audit round 0.2.2 (second cloud sync review)
+Checked by reading every cloud file and re-running all suites on the uploaded v0.2.1 ZIP (all passed: 36 / 19 / 36 / 12 / 13). The two v0.2.1 fixes (old cloud save never pulled silently; guard against a tap during apply) were confirmed in code AND by their tests. RLS policies, grants and trigger were re-read: own rows only, no delete, owner and revision forced by the database.
+Found and fixed (each with a test that fails on v0.2.1):
+- Dead end in the conflict dialog: if the cloud changed in the instant between pressing "Keep this device's save" and the write, v0.2.1 stayed in the conflict phase with NO dialog, and "Sync now" was ignored until the page was reloaded. Nothing was ever overwritten, but the player was stuck. Now the engine looks again at once and the dialog returns with the new cloud version. (js/sync.js)
+- Small guard: if the save keeps changing through all passes of one sync, the status goes back to "Waiting to sync" and retries instead of staying on "Syncing". (js/sync.js; test is a guard only, it also passes on v0.2.1)
+- js/config.js is now served network-first by the service worker (cached copy only when offline). Before, filling in the key without running `npm run stamp` left installed phones on the old EMPTY config, so cloud sync never appeared. (sw.js; browser test fails on v0.2.1)
+- docs/PANDUAN_INDONESIA.md told the owner to send the key to Claude in chat. Rewritten: the owner pastes the key into js/config.js alone. config.js ships with the key EMPTY.
+- Key helper (added after 0.2.2 review, no game change): `tools/set-key.mjs` and `ISI-KEY.bat` write the owner's Publishable key into `js/config.js` from a hidden prompt or a text file, refuse Secret/service_role keys, never print or store the key elsewhere, and re-stamp `sw.js`. Checked on a temporary copy with FAKE keys (piped input, a text file holding a Publishable plus a Secret key, a real pseudo-terminal with backspace, `--clear`); `npm test` and `npm run test:sync-browser` still pass with a key filled in. No automated test file covers the helper.
+- Comparison with the live repository (v0.2.0, read-only clone, nothing pushed): only cloud files are new, and `js/rules.js`, `js/data.js`, `js/storage.js`, `js/pwa.js`, `index.html`, `manifest.webmanifest` are byte-identical. `css/style.css` only gains 9 added lines; `js/ui.js` only gains the cloud panel slot and `applyRemote`. The repository has no workflow file, so GitHub Pages most likely deploys straight from the branch (not verified: the Pages setting itself is not readable from here).
+
+Tests now: npm test 36, test:browser 19, test:sync 38, test:sync-browser 13, test:rls 13 (see tests/*RESULTS.txt). All Supabase calls in these tests go to a stand-in server or a local simulated PostgreSQL. Nothing has been run against the real Supabase project.
+
+## Audit round 0.2.1 (cloud sync review)
+Findings, each backed by a test run:
+- The 6 failing UI-flow tests in `npm test` were a STALE TEST HARNESS, not a game regression: `js/main.js` (cloud wiring) reads the globals `location` and `history`, and the jsdom harness in `tests/run.mjs` only defined `window`/`document`/`FormData`. `boot()` threw, `app` was never created, and the next five tests failed on that. Fix: two lines in the harness. No gameplay file changed for this.
+- `js/config.js` was EMPTY, so cloud sync was off. The Project URL is now set; the Publishable key is added separately by the owner (see docs/PANDUAN_INDONESIA.md).
+- Gap closed: a cloud save with LESS game time than this device was still pulled silently when this device had no unsynced change (for example after an old export is imported on another device). It now goes to the conflict screen (`looksOlder`, `reason: 'older-cloud'`), with both versions backed up.
+- Gap closed: a tap landing exactly while a cloud save was being applied could be overwritten. `applyRemote(state, guard)` now re-checks that the device is unchanged at the start AND the end of the write; pull, Restore and "Keep the cloud save" all pass a guard.
+- Added: pasting a Secret / service_role key into `config.js` makes cloud sync refuse to start (`keyProblem`) instead of sending it.
+- Added: "Create account" for an email that already has an account (Supabase sends no email in that case) now says so, and the sign-in form tells the player to use Sign in on the second device. The empty-`identities` signal is documented Supabase behaviour but was NOT confirmed against the real project.
+- Tests: tests/run.mjs 36 (harness fix, config.js check, UI-level guard test), tests/sync.mjs 36 (7 new, each shown to fail when its fix is removed).
+Still NOT verified (needs the owner): SQL migration run in the real project, sign-up and email delivery, redirect URLs, real token refresh, two real devices. See docs/SUPABASE_SETUP.md step 7.
 
 ## Test results
 

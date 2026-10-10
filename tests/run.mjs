@@ -292,6 +292,7 @@ function makeDom() {
   const dom = new JSDOM('<!doctype html><div id="root"></div>', { url: 'http://localhost:8080/', pretendToBeVisual: true });
   const w = dom.window; w.scrollTo = () => {};
   globalThis.window = w; globalThis.document = w.document; globalThis.FormData = w.FormData;
+  globalThis.location = w.location; globalThis.history = w.history;   // main.js reads location/history (cloud sync redirect + auth fragment)
   return dom;
 }
 const tick = () => new Promise((r) => setTimeout(r, 5));
@@ -401,6 +402,22 @@ await test('REFRESH: reload the app and verify everything persisted', async () =
   await nav('tracker'); ok(text().includes('Stretch'));
 });
 
+await test('CLOUD APPLY GUARD (real ui.js): a cloud save is not applied if the player acted meanwhile; a clean apply works and is saved locally', async () => {
+  await app.settle();
+  const mine = app.state, snapshotBefore = JSON.stringify(mine);
+  const other = JSON.parse(JSON.stringify(mine)); other.money += 1000; other.character.name = 'FromCloud';
+  let err = null; try { await app.applyRemote(other, () => false); } catch (e) { err = e; }
+  ok(err && err.code === 'LOCAL_CHANGED', 'guard failure must reject with LOCAL_CHANGED');
+  ok(app.state === mine && JSON.stringify(app.state) === snapshotBefore, 'state must be untouched when the guard fails');
+  const stored = (await S.loadGame()).state; ok(stored && stored.character.name !== 'FromCloud', 'nothing from the cloud may be written to the local save');
+  // guard turns false only AFTER the write started (the player tapped during the write): in-memory state must still be kept
+  let calls = 0; err = null; try { await app.applyRemote(other, () => ++calls < 2); } catch (e) { err = e; }
+  ok(err && err.code === 'LOCAL_CHANGED' && app.state === mine, 'a tap during the write must not be replaced');
+  await app.applyRemote(other, () => true);
+  eq(app.state.character.name, 'FromCloud'); eq((await S.loadGame()).state.character.name, 'FromCloud', 'applied save is stored on this device');
+  app.state = mine; await app.persist();   // put the test profile back
+});
+
 // ------------------------------------------------------------------ PWA (static checks)
 console.log('\n== PWA files (static) ==');
 const { readPrecache, computeVersion, stampedVersion } = await import('../tools/stamp-version.mjs');
@@ -448,8 +465,17 @@ await test('app code makes no remote requests (no quoted or url() http(s) refere
   const files = ['index.html', 'css/style.css', ...fs.readdirSync(path.join(ROOT, 'js')).map((f) => 'js/' + f)];
   for (const f of files) {
     const t = fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\/\/ .*$/gm, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    if (f === 'js/config.js') continue;   // checked separately below: it may hold exactly one Supabase project URL
     ok(!/['"(]https?:\/\//.test(t), `remote URL reference in ${f}`);
   }
+});
+await test('config.js: only a Supabase project URL and a Publishable key (never a Secret / service_role key)', () => {
+  const t = fs.readFileSync(path.join(ROOT, 'js/config.js'), 'utf8').replace(/\/\/ .*$/gm, '');
+  const urls = [...t.matchAll(/https?:\/\/[^'"\s]+/g)].map((m) => m[0]);
+  ok(urls.length <= 1 && urls.every((u) => /^https:\/\/[a-z0-9]+\.supabase\.co$/.test(u)), 'config.js must contain at most one https://<ref>.supabase.co URL, got ' + JSON.stringify(urls));
+  ok(!/sb_secret_|service_role/i.test(t), 'secret key text in config.js');
+  const key = (t.match(/SUPABASE_KEY\s*=\s*'([^']*)'/) || [])[1] || '';
+  ok(key === '' || /^sb_publishable_[A-Za-z0-9_-]+$/.test(key), 'SUPABASE_KEY must be empty or an sb_publishable_ key');
 });
 
 // ------------------------------------------------------------------ emoji scan
