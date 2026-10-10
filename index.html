@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>TAP Protocol</title>
+  <meta name="description" content="A local-first text RPG and life tracker.">
+  <meta name="theme-color" content="#0e1016">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="root"><p class="loading">Loading TAP Protocol</p></div>
+  <noscript><p class="loading">TAP Protocol needs JavaScript enabled.</p></noscript>
+  <script>
+    // ES modules do not load from file:// URLs. Explain this instead of showing "Loading" forever.
+    if (location.protocol === 'file:') {
+      document.getElementById('root').innerHTML = '<p class="loading">TAP Protocol cannot run when index.html is opened directly. Start a local server in this folder (python3 -m http.server 8080) and open http://localhost:8080/ instead. See README.md.</p>';
+    }
+  </script>
+  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/pwa.js"></script>
+</body>
+</html>
