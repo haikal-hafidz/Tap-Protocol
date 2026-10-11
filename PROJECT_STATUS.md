@@ -1,5 +1,106 @@
 # PROJECT_STATUS - TAP Protocol Phase 1
 
+## UX Session 3: lightweight visual polish (current)
+Scope: visual refinement only. Changed `css/style.css` and re-stamped `sw.js`. No change to any `js/` file, game rule, reward, storage, sync, save schema, palette or layout.
+
+- Fonts: no web fonts (offline PWA, nothing to download). Serif stack (headings, story, journal) now lists Iowan Old Style, Charter, Sitka Text, Palatino, Noto Serif, Georgia; UI stays on the system sans. Body 15px on mobile, 16px from 40rem. Story text 1.65 line height, 64ch. Form fields 16px (no iOS focus zoom). Tabular numerals for stats.
+- Scale: component paddings, gaps and heights reduced individually (no zoom/transform). Action cards stay a row (text + compact button) down to 22rem. Header fits one row at 390px. Meters 2x2 on mobile. Nav 47px (44px touch target kept). Home page height at 390px 4257 -> 3230px, at 300px 5038 -> 3862px, at 1280px 2582 -> 2313px.
+- Corners: scale 6px (controls, chips, tabs), 10px (cards, panels, rows), 14px (dialogs). Bars and the count badge stay fully rounded.
+
+Visual checks (real Chromium): screenshots looked at for Home (1280, 390, 300), Progress (1280, 390), Tracker (390), Journal with a long Indonesian entry (300). A script scanned 54 screens at 1280, 390 and 300px for overflow, clipping, small controls and text under 12px: no problems. Quests, Inventory, Settings and the talk panel were covered by the script only, not by eye. Fonts in screenshots were the sandbox fallbacks, not the named stack fonts.
+
+Tests (Node v22.22.2, Chromium via Playwright 1.56.0), final code: `test:sync` 43/43, `test:sync-browser` 13/13, `test:browser` 24/26. The 2 failures are the axe-core tests, which could not run because axe-core could not be installed (no network); they failed the same way before any change. `npm test` and `test:rls` could not be run (fake-indexeddb, jsdom, pglite not installable offline). Not run against a real Supabase project.
+
+## UX Session 2, Part 2: final QA and release
+Scope: verification of Part 1 plus fixes for what the QA found. No redesign. No change to `rules.js`, `data.js`, `storage.js`, `sync.js`, `cloud.js`, the save schema, any game rule or the Session 1 palette and layout (confirmed: those five files are byte-identical to the Part 1 checkpoint).
+
+Test results (Node v22.22.2, Chromium 141.0.7390.37 through Playwright 1.56.0), run on the final code:
+- `npm test` 52/52, `test:sync` 43/43, `test:rls` 13/13, `test:sync-browser` 13/13, `test:browser` 26/26. Output: `tests/RESULTS.txt`, `tests/SYNC_RESULTS.txt`, `tests/BROWSER_RESULTS.txt`.
+- Baseline (the unmodified Part 1 checkpoint, run first): 52 / 22 / 43 / 13 / 13, matching the Part 1 report. No pre-existing failures. No regressions from the Part 2 changes (the 22 old browser tests still pass; 4 were added).
+- Nothing was run against a real Supabase project. All cloud tests use a stand-in server or a simulated PostgreSQL (PGlite).
+
+Defects found by the Part 2 QA and fixed (the first three were missed by Part 1 because its scans used a fresh save, only 390 and 1280px, and never opened Progress at 300px):
+- WCAG AA colour contrast failure (3.38:1, needs 4.5:1) on every blocked action card (Home, Inventory): `.action.blocked { opacity: .8 }` faded the muted text. Blocked cards now use a dashed edge at full text strength.
+- At 300px the Progress skill rows were wider than their card ("Level" cut off) and a long travel button stuck out of its panel. Cause: grid minimum widths larger than the container (same cause as the Session 1 `.cols` fix). `.skills`, `.cols3`, `.needs`, `.choices` now use `min(Xrem, 100%)`; travel buttons wrap.
+- Pressing Dismiss on a result dropped keyboard focus to the page body. It now goes to the page title.
+- Every action button was named just "Start". Accessible names are now e.g. "Start: Study" (visible label stays first).
+- A result title was an `h3` straight after the page `h1`; now an `h2` styled exactly like the old one.
+- Export gave no in-app feedback; it now shows a status note (it cannot confirm the browser finished the download). An empty Import said "not valid JSON"; it now asks for the file contents.
+- "Streak: 1 days" is now "1 day". The name button and the Tracker History disclosure are larger touch targets.
+
+Files changed in Part 2: `js/ui.js`, `css/style.css`, `tests/browser.mjs` (+4 tests), `sw.js` (re-stamped), `README.md` and `docs/SUPABASE_SETUP.md` (stale test counts), `tests/RESULTS.txt`, `tests/SYNC_RESULTS.txt`, `tests/BROWSER_RESULTS.txt`, this file. No file was added or removed.
+
+New tests (each of the first, second and fourth fails on the Part 1 code; the third covers behaviour that already worked but had no test):
+- axe-core (WCAG 2.0, 2.1, 2.2 A and AA) on a populated save at 300, 390 and 1280px: Home with a blocked card, Tracker with history, Inventory, World with talk panel, Progress, Notifications, import confirmation.
+- No element sticks out of its panel at 300 and 390px on the main pages and the talk panel.
+- Forced storage failure: the save-failure alert appears, the game stays playable, the alert clears on recovery.
+- Unique button names, focus after Dismiss, Export feedback and clearing, empty Import, streak wording, heading level.
+
+Inspected in a real browser: populated saves at 1280, 390 and 300px; every page, both other Home tabs, both header panels, the warning dialog, the import confirmation, the reset refusal, setup and journal/Tracker validation, and the save-failure alert were driven and measured by script (overflow, element containment, control sizes, focus, axe). Screenshots were actually looked at for: Home (1280, 390, 300), Tracker (390), Progress skills (300, before and after the fix), travel panel (300) and a blocked card (390). Other screens were verified by script only, not by eye.
+Keyboard (driven with Tab, Enter, Space and Escape in Chromium): tab and nav buttons, activities, Dismiss, journal submit, header panel open and Escape, warning dialog trap and focus return all behave. Automated axe plus this keyboard pass do not establish full accessibility compliance.
+
+Known limitations (not fixed, by scope): a one-off task is stored as a goal with target 1, so it shows the "Goal" tag. App icons still use the dark artwork. No skip link (the page has only two header buttons before the content). A real screen reader, Firefox, Safari, a real installed PWA and real devices were not tested. Contrast was measured by axe on the states listed above, not on every possible state.
+
+## UX Session 2, Part 1: interaction audit and implementation
+Scope: interaction clarity only. The Session 1 layout, palette and navigation are unchanged. No game rule, reward, storage, sync or save-schema code changed (`rules.js`, `data.js`, `storage.js`, `sync.js`, `cloud.js` untouched).
+
+Audit (verified in a real browser at 390px before changing anything) and result:
+- DEFECTIVE, fixed: an action's result (`.report`) rendered at the top of the page, so pressing "Start" at the bottom of Home showed nothing in view (result was 2700px above). New feedback is now scrolled into view and takes focus (`app.reveal`).
+- DEFECTIVE, fixed: a result or Tracker notice stayed on every other page until dismissed. Feedback now clears when you go to a different page.
+- DEFECTIVE, fixed: after any action keyboard focus fell to the page body (every render rebuilds the page). Focus is put back on the same control.
+- DEFECTIVE, fixed: text typed in the Journal, Tracker or Import forms was wiped by any re-render (opening a panel, cancelling a dialog, a failed submit, visiting another page). Drafts are kept until a successful submit.
+- DEFECTIVE, fixed: Import replaced the whole game with no confirmation. It now asks first, naming the file's character and the current one, and Escape or Cancel changes nothing.
+- PARTIAL, fixed: a double click on Create or Save re-submitted the emptied form and replaced the success message with an "enter a name" error; that second empty submit is now ignored.
+- PARTIAL, fixed: the Tracker form showed cadence and target for every type; now only the one that applies is shown.
+- PARTIAL, fixed: form errors were plain text; they are now announced (role alert / status) and brought into view. Reset's refusal says nothing was deleted.
+- PARTIAL, fixed: disabled travel buttons on Home hid their reason in a tooltip; the reason is now written out. Buttons have a 40px minimum height (small ones 36px).
+- MISSING, added: a failed local save now shows a visible alert (previously only small header text). Not covered by an automated test (no way to force a storage failure in the harness).
+- Messages and Notifications panels: open, Close, Escape (also when focus is on plain page content), outside click and navigation all work; focus returns to the opening button. Content stays real: no messages exist, notifications come from the save only.
+- Complete and unchanged: warning dialog (focus trap, Escape, focus return), RESET confirmation, Tracker reward feedback, disabled-with-reason action cards, cloud sync dialogs.
+
+Files changed: `js/ui.js`, `css/style.css`, `sw.js` (re-stamped), `tests/browser.mjs` (+1 test, import confirmation), `tests/sync-browser.mjs` (import confirmation), `tests/*RESULTS.txt`, this file.
+Tests: `npm test` 52/52, `test:browser` 22/22, `test:sync` 43/43, `test:rls` 13/13, `test:sync-browser` 13/13 (Node v22, Chromium 141). Nothing run against a real Supabase project.
+(Part 1 left a populated-save pass and a keyboard pass for Part 2; see the section above this one.)
+
+## UX Session 1 (Parts 1 and 2): final status
+
+Implemented and verified in source and in a real browser:
+- PITHE is the only space; no space selector exists. Tracker -> Pithe rewards untouched (new saves on by default, stored true/false kept, 6 EXP + 4 skill EXP, 3 granted per device-local day, capped completions stored as `capped` and never paid later, per-completion `reward` claim, no retroactive pay, one-off `task` type).
+- Light editorial palette (cream, forest, olive, terracotta, warm white, muted, divider). Small text uses darker derived tones (#66655C, #5C6B40, #9C4E3D) for WCAG AA; exact palette values are used for surfaces and fills. axe-core reports no violations on all views, both Home tabs, both header panels, and the dialog.
+- Shell: header (title, game time, Messages, Notifications), compact status summary on every page, one main scroll flow, bottom navigation at every width in the order Home, World, Journal, Progress, More. No sidebar. Header holds no primary navigation.
+- Home: People, Family, Personal tabs (a row; fits at 300px). Personal is the default and shows Tracker goals with quick record. Family says honestly there is no family data in this world.
+- Messages: honest "no messages" state (no messaging exists). Notifications: only real conditions from the save (needs warnings, quest deadline under 24h), otherwise an empty state. Panels close by Close, Escape (focus returns to the button), outside click or navigation.
+- Progress: attributes, skills, progression only. More: Tracker, Quests, Inventory, Settings and save data (export, import, cloud sync, reset).
+- Startup: a real loading state replaced when the save is read; an error screen with Reload when a game file is missing or throws while loading.
+
+Part 1 changed: `css/style.css`, `js/ui.js`, `js/main.js`, `index.html`, `manifest.webmanifest`, `sw.js`, tests. Part 2 changed: `css/style.css` (Home tabs shrink to fit 300px, error box margin), `index.html` (window error and unhandledrejection handlers so a throwing module cannot leave the loading screen up), `README.md`, `docs/SUPABASE_SETUP.md`, `docs/PANDUAN_INDONESIA.md` (Settings path is now More, Settings and save data), `tests/browser.mjs` (+1 test), `tests/*RESULTS.txt` (regenerated), `sw.js` (re-stamped). No change to `rules.js`, `data.js`, `storage.js`, `sync.js`, `cloud.js`, the save schema or any game rule.
+
+Test results (Node v22.22.0, Chromium 141 via Playwright): `npm test` 52/52, `test:browser` 21/21, `test:sync` 43/43, `test:rls` 13/13, `test:sync-browser` 13/13. No pre-existing failures; no regressions found. The Part 1 test edits were needed because the old tests asserted the removed sidebar and Settings on Progress.
+
+Visually inspected (screenshots at 1280, 390 and 300px): loading, setup, Home (Personal, People, Family), Messages and Notifications panels, Tracker, Progress, More, Settings, load-failure and module-throw error screens. Not inspected: every page with a populated save at every width, Firefox and Safari, a real installed PWA, screen readers.
+
+NOT validated: nothing was run against a real Supabase project (all cloud tests use a stand-in server or simulated PostgreSQL). App icons still use the original dark artwork (outside Session 1 scope).
+
+(Sections below this line are the history of earlier rounds. Where they describe the old seven-item or sidebar layout, the section above is current.)
+
+## Tracker rewards default-on round
+- New characters start with real-life rewards ON (`createCharacter`: `integration` defaults to true; the setup checkbox is pre-checked; an explicit unchecked box still means off). New Tracker items are linked by default while rewards are on.
+- `migrateState` keeps any stored true/false `settings.integration` exactly as saved (legacy fixture stays false). Only a save with no stored value at all gets the default. Old saves cannot tell "explicit off" from "never touched", so every stored false is respected.
+- Tracker shows Enable/Disable rewards at all times. Cap unchanged: 3 GRANTED rewards per device-local real calendar day, counted from stored claims; completions past the cap are still recorded, stored as `capped`, never queued or paid later.
+- Files: js/rules.js, js/ui.js, tests/run.mjs, tests/sync.mjs, tests/browser.mjs, README.md, sw.js (re-stamp), this file.
+
+## Tracker-to-PITHE round (real-life completions reward the character)
+
+What was found: the Tracker already paid a reward through the normal EXP and skill rules, but the reward amounts were hard-coded in `doTrackerReward`, a completion kept no record of whether it had been paid (the only guards were "one completion per goal per day or week" and a per-day counter), the daily cap could be reset by moving the date, and there was no one-off task type.
+Changed:
+- `js/data.js`: `TRACKER_REWARD = { exp: 6, skillExp: 4, dailyCap: 3 }` (same numbers as before, now configuration).
+- `js/rules.js`: every new completion is judged exactly once by `claimTrackerReward` and the outcome is stored on the completion as `reward: { status: 'granted' | 'capped' | 'not-linked' | 'disabled', exp, skill, skillExp }`. The daily cap is now counted from stored claims (and the old counter), so changing the date back and forth cannot reset it. `addGoal` accepts kind `task` (stored as a goal with target 1).
+- `js/ui.js`: Tracker gets a "One-off task" type, an "Enable real-life rewards" button when they are off, accurate reward text, and each history line shows what the completion earned.
+- `tests/run.mjs` (+11), `tests/sync.mjs` (+4), `tests/browser.mjs` (+1). `sw.js` re-stamped, README updated.
+Save schema: backward compatible. Completions saved earlier have no `reward` field and stay exactly as they were; they are never paid retroactively. No migration step, no change to storage keys, the checksum, export/import format, or the sync engine (sync still moves whole saves).
+Not changed: native quests, activities, the world, `storage.js`, `sync.js`, `cloud.js`.
+Guarantee and limits: see the final report of this round (the claim lives in the same JSON save that is written to IndexedDB and to the cloud as one unit, so a reward and its proof move together; two devices that complete the same item offline get a conflict, never a second reward; nothing was run against a real Supabase project; two tabs of the same browser still follow last-write-wins).
+
 Status: Phase 1 vertical slice, now an installable offline-first PWA. The earlier audit fixes remain. Phase 2 has not been started and no game mechanics, narrative, data or save schema changed in this round.
 
 Automated results (details and environment under "Test results"): 36 of 36 fast tests pass (`npm test`, revision 0.2.2), 19 of 19 real-browser tests pass (`npm run test:browser`, Chromium 141 through Playwright), including offline play with the server stopped and the browser offline.

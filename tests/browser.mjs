@@ -92,7 +92,11 @@ async function create(page, base, name = 'Pithe') {
   await page.click('form[data-form="create"] button[type=submit]');
   await page.waitForSelector('.navbtn');
 }
-const nav = (page, view) => page.click(`.navbtn[data-view="${view}"]`);
+const MORE_PAGES = ['tracker', 'quests', 'inventory', 'settings'];
+const nav = async (page, view) => {
+  if (MORE_PAGES.includes(view)) { await page.click('.navbtn[data-view="more"]'); await page.click(`main [data-action="nav"][data-view="${view}"]`); }
+  else await page.click(`.navbtn[data-view="${view}"]`);
+};
 const readState = (page) => page.evaluate(() => new Promise((resolve, reject) => {
   const q = indexedDB.open('tap-protocol');
   q.onerror = () => reject(q.error);
@@ -127,8 +131,9 @@ const activity = (id) => `[data-action="do"][data-kind="activity"][data-id="${id
 const swReady = (page) => page.evaluate(async () => { const r = await navigator.serviceWorker.ready; return !!r.active; });
 const cacheNames = (page) => page.evaluate(() => caches.keys());
 const swVersion = (root) => 'tap-protocol-' + computeVersion(root);
-const VIEW_IDS = ['dashboard', 'character', 'journal', 'tracker', 'world', 'quests', 'inventory'];
-const VIEW_TITLES = ['Dashboard', 'Character', 'Journal', 'Tracker', 'World', 'Quests', 'Inventory'];
+const VIEW_IDS = ['dashboard', 'character', 'journal', 'tracker', 'world', 'quests', 'inventory', 'settings', 'more'];
+const VIEW_TITLES = ['Home', 'Progress', 'Journal', 'Tracker', 'World', 'Quests', 'Inventory', 'Settings', 'More'];
+const NAV_LABELS = ['Home', 'World', 'Journal', 'Progress', 'More'];
 
 browser = await launch();
 console.log(`Browser: Chromium ${browser.version()} (Playwright, headless)`);
@@ -213,7 +218,7 @@ console.log('\n== Offline gameplay (server stopped AND context offline) ==');
       p2.on('pageerror', (e) => p2.errors.push(e.message));
       await p2.goto(srv.url); // start_url "./"
       await p2.waitForSelector('.navbtn', { timeout: 10000 });
-      ok(await p2.locator('.navbtn').count() === 7, 'navigation missing');
+      eq(await p2.locator('.navbtn').allInnerTexts(), NAV_LABELS, 'navigation missing');
       ok(await p2.evaluate(() => !!navigator.serviceWorker.controller), 'not controlled by the service worker');
       await p2.goto(srv.url + 'index.html');
       await p2.waitForSelector('.navbtn', { timeout: 10000 });
@@ -223,7 +228,7 @@ console.log('\n== Offline gameplay (server stopped AND context offline) ==');
 
     await test('OFFLINE: the existing save is read, and every section can be opened', async () => {
       await page.reload(); await page.waitForSelector('.navbtn');
-      ok((await page.locator('.status h2').innerText()).includes('Pithe'), 'character not shown');
+      ok((await page.locator('.statusbar .who').innerText()).includes('Pithe'), 'character not shown');
       const s = await readState(page);
       eq(s.clock, online.clock, 'clock of loaded save'); eq(s.character.exp, online.character.exp, 'exp of loaded save');
       for (let i = 0; i < VIEW_IDS.length; i++) {
@@ -287,7 +292,7 @@ await test('UPDATE: new version installs beside the old one, prompt appears, acc
     await page.waitForSelector('.navbtn');
     eq(await cacheNames(page), [v2], 'old cache should be deleted after activation');
     eq(await readState(page), before, 'save changed by the update');
-    ok((await page.locator('.status h2').innerText()).includes('Pithe'));
+    ok((await page.locator('.statusbar .who').innerText()).includes('Pithe'));
     ok(!(await page.locator('#update-banner').count()), 'prompt still shown after update');
     eq(page.errors, [], 'console errors');
   } finally { await ctx.close(); await srv.close(); }
@@ -347,7 +352,7 @@ await test('EXISTING SAVE: a save written by the previous (pre-PWA) release load
   try {
     await seedLegacy(page, srv.url);
     await page.goto(srv.url); await swReady(page); await page.reload(); await page.waitForSelector('.navbtn');
-    ok((await page.locator('.status h2').innerText()).includes(LEGACY.summary.name), 'legacy character not shown');
+    ok((await page.locator('.statusbar .who').innerText()).includes(LEGACY.summary.name), 'legacy character not shown');
     const s = await readState(page);
     eq({ clock: s.clock, money: s.money, exp: s.character.exp, loc: s.location, journal: s.journal.length, goals: s.tracker.goals.length, notebook: s.inventory.notebook || 0 },
       { clock: LEGACY.summary.clock, money: LEGACY.summary.money, exp: LEGACY.summary.exp, loc: LEGACY.summary.location, journal: LEGACY.summary.journal, goals: LEGACY.summary.goals, notebook: LEGACY.summary.notebook }, 'legacy save contents');
@@ -355,7 +360,7 @@ await test('EXISTING SAVE: a save written by the previous (pre-PWA) release load
     ok((await page.locator('main').innerText()).includes('This entry was written by the previous release.'));
     await srv.close(); await ctx.setOffline(true);
     await page.reload(); await page.waitForSelector('.navbtn');
-    ok((await page.locator('.status h2').innerText()).includes(LEGACY.summary.name), 'legacy save not loaded offline');
+    ok((await page.locator('.statusbar .who').innerText()).includes(LEGACY.summary.name), 'legacy save not loaded offline');
     eq(page.errors, [], 'console errors');
   } finally { await ctx.close(); await srv.close().catch(() => {}); }
 });
@@ -369,7 +374,7 @@ await test('export downloads a valid save; invalid imports are rejected without 
     await create(page, srv.url);
     await act(page, activity('study'));
     const saved = await until(async () => { const s = await readState(page); return s && s.character.exp > 0 ? s : null; }, 10000, 'save');
-    await nav(page, 'character');
+    await nav(page, 'settings');
     const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="export"]')]);
     ok(/^tap-protocol-save-\d{4}-\d{2}-\d{2}\.json$/.test(dl.suggestedFilename()), 'export file name: ' + dl.suggestedFilename());
     const exported = fs.readFileSync(await dl.path(), 'utf8');
@@ -385,9 +390,12 @@ await test('export downloads a valid save; invalid imports are rejected without 
     await nav(page, 'dashboard'); await act(page, activity('rest'));
     const moved = await until(async () => { const s = await readState(page); return s.clock > saved.clock ? s : null; }, 10000, 'rest saved');
     ok(moved.clock > saved.clock);
-    await nav(page, 'character');
+    await nav(page, 'settings');
     await page.fill('form[data-form="import"] textarea', exported);
     await page.click('form[data-form="import"] button[type=submit]');
+    ok(await page.locator('.modal [data-action="confirm"]').isVisible(), 'importing must ask before replacing the game');
+    await page.keyboard.press('Escape'); ok(!(await page.locator('.modal').count()), 'Escape should cancel the import'); eq(await readState(page), moved, 'cancelled import changed the save');
+    await page.click('form[data-form="import"] button[type=submit]'); await page.click('.modal [data-action="confirm"]');
     const back = await until(async () => { const s = await readState(page); return s.clock === saved.clock ? s : null; }, 10000, 'import saved');
     eq(back, saved, 'import did not restore the exported save exactly');
     eq(page.errors, [], 'console errors');
@@ -400,7 +408,7 @@ await test('reset requires the exact word RESET: other input is refused and the 
   try {
     await create(page, srv.url); await act(page, activity('study'));
     const saved = await until(async () => { const s = await readState(page); return s && s.character.exp > 0 ? s : null; }, 10000, 'save');
-    await nav(page, 'character');
+    await nav(page, 'settings');
     for (const wrong of ['', 'reset', 'RESET ', 'Reset', 'DELETE']) {
       await page.fill('form[data-form="reset"] input[name=confirm]', wrong);
       await page.click('form[data-form="reset"] button[type=submit]');
@@ -425,7 +433,7 @@ async function overflow(page) {
     return { scrollW: de.scrollWidth, clientW: de.clientWidth, offenders };
   });
 }
-await test(`no horizontal overflow on the setup screen and all 7 views at ${WIDTHS.join(', ')} px`, async () => {
+await test(`no horizontal overflow on the setup screen and all 9 views (incl. More) at ${WIDTHS.join(', ')} px`, async () => {
   const srv = await serve(ROOT);
   try {
     for (const w of WIDTHS) {
@@ -456,23 +464,23 @@ await test(`navigation labels are all present, in order, readable, spaced and to
           const r = b.getBoundingClientRect(), rg = document.createRange(); rg.selectNodeContents(b); const t = rg.getBoundingClientRect();
           return { text: b.textContent.trim(), x: r.x, y: r.y, w: r.width, h: r.height, tx: t.x, tr: t.right, ty: t.y, tb: t.bottom, fs: parseFloat(getComputedStyle(b).fontSize), clip: b.scrollWidth > b.clientWidth + 0.5 };
         }));
-        eq(items.map((i) => i.text), VIEW_TITLES, `labels @${w}`);
-        const desktop = w > 832;
+        eq(items.map((i) => i.text), NAV_LABELS, `labels @${w}`);
+        const desktop = false;   // the bottom bar is used at every width now
         for (const i of items) {
           ok(!i.clip, `"${i.text}" clipped @${w}`);
           ok(i.tx >= i.x - 0.5 && i.tr <= i.x + i.w + 0.5, `"${i.text}" text outside its button @${w}`);
           ok(i.h >= 40, `"${i.text}" button only ${i.h}px high @${w}`);
-          if (!desktop) { ok(i.w >= 44 && i.h >= 44, `"${i.text}" touch target ${Math.round(i.w)}x${Math.round(i.h)} @${w}`); ok(i.fs >= 12, `"${i.text}" font ${i.fs}px @${w}`); }
+          { ok(i.w >= 44 && i.h >= 44, `"${i.text}" touch target ${Math.round(i.w)}x${Math.round(i.h)} @${w}`); ok(i.fs >= 12, `"${i.text}" font ${i.fs}px @${w}`); }
         }
         for (let a = 0; a < items.length; a++) for (let b = a + 1; b < items.length; b++) {
           const A = items[a], B = items[b];
           const overlap = A.x < B.x + B.w - 0.5 && B.x < A.x + A.w - 0.5 && A.y < B.y + B.h - 0.5 && B.y < A.y + A.h - 0.5;
           ok(!overlap, `buttons "${A.text}" and "${B.text}" overlap @${w}`);
-          if (!desktop && Math.abs(A.y - B.y) < 4) { const [L, R] = A.x < B.x ? [A, B] : [B, A]; ok(R.tx - L.tr >= 6, `labels "${L.text}" and "${R.text}" only ${(R.tx - L.tr).toFixed(1)}px apart @${w}`); }
+          if (Math.abs(A.y - B.y) < 4) { const [L, R] = A.x < B.x ? [A, B] : [B, A]; ok(R.tx - L.tr >= 6, `labels "${L.text}" and "${R.text}" only ${(R.tx - L.tr).toFixed(1)}px apart @${w}`); }
         }
         const rows = new Set(items.map((i) => Math.round(i.y / 10))).size;
-        if (desktop) eq(rows, 7, 'desktop sidebar should stack the 7 items'); else ok(rows <= 2, `${rows} rows @${w}`);
-        if (!desktop) { // fixed bar must not cover the end of the page
+        eq(rows, 1, `bottom nav should be one row @${w}`);
+        { // fixed bar must not cover the end of the page
           await nav(page, 'dashboard'); await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
           const gap = await page.evaluate(() => { const nb = document.querySelector('.nav').getBoundingClientRect().top; const m = document.querySelector('main'); return nb - m.lastElementChild.getBoundingClientRect().bottom; });
           ok(gap >= -0.5, `bottom nav covers the last content by ${-gap}px @${w}`);
@@ -519,7 +527,7 @@ await test('warning dialog: focus moves in (onto Cancel), Tab is trapped, Escape
   } finally { await ctx.close(); await srv.close(); }
 });
 
-await test('automated accessibility scan (axe-core, WCAG 2.0/2.1 A and AA) on the setup screen, all 7 views and the warning dialog at 390px and 1280px', async () => {
+await test('automated accessibility scan (axe-core, WCAG 2.0/2.1 A and AA) on the setup screen, all 9 views (incl. More) and the warning dialog at 390px and 1280px', async () => {
   const srv = await serve(ROOT);
   try {
     const axePath = require.resolve('axe-core/axe.min.js');
@@ -535,12 +543,66 @@ await test('automated accessibility scan (axe-core, WCAG 2.0/2.1 A and AA) on th
         await page.goto(srv.url); await page.waitForSelector('form[data-form="create"]'); await scan('setup');
         await seedLegacy(page, srv.url); await page.goto(srv.url); await page.waitForSelector('.navbtn');
         for (const v of VIEW_IDS) { await nav(page, v); await scan(v); }
+        await nav(page, 'dashboard');
+        for (const t of ['people', 'family']) { await page.click(`[data-action="home-tab"][data-tab="${t}"]`); await scan('home ' + t); }
+        await page.click('[data-action="panel"][data-panel="messages"]'); await page.waitForSelector('#header-panel'); await scan('messages panel');
+        await page.click('[data-action="panel"][data-panel="notifications"]'); await scan('notifications panel');
+        await page.keyboard.press('Escape'); ok(!(await page.locator('#header-panel').count()), 'Escape did not close the panel');
+        await page.click('[data-action="home-tab"][data-tab="personal"]');
         await nav(page, 'dashboard'); await act(page, '[data-action="do"][data-kind="travel"][data-to="home"]');
         await page.click(activity('sleep')); await page.waitForSelector('.modal'); await scan('warning dialog');
       } finally { await ctx.close(); }
     }
     ok(!report.length, '\n      ' + report.join('\n      '));
   } finally { await srv.close(); }
+});
+
+await test('startup failure: a game file that throws shows the error screen with Reload (never an endless loading screen); Home categories fit at 300px', async () => {
+  const srv = await serve(ROOT);
+  try {
+    const bad = await newPage({ serviceWorkers: 'block' });
+    try {
+      await bad.page.route('**/js/ui.js', (r) => r.fulfill({ contentType: 'text/javascript', body: 'throw new Error("boom")' }));
+      await bad.page.goto(srv.url); await bad.page.waitForSelector('.fatal');
+      ok((await bad.page.locator('.fatal').innerText()).includes('could not start') && await bad.page.locator('.fatal button').isVisible(), 'no error screen with Reload');
+      ok(!(await bad.page.locator('.boot').count()), 'loading screen still shown after failure');
+    } finally { await bad.ctx.close(); }
+    const { ctx, page } = await newPage({ viewport: { width: 300, height: 800 }, serviceWorkers: 'block' });
+    try {
+      await create(page, srv.url);
+      const t = await page.evaluate(() => { const e = document.querySelector('[aria-label="Home categories"]'); return { sw: e.scrollWidth, cw: e.clientWidth, labels: [...e.children].map((b) => b.textContent.trim()) }; });
+      ok(t.sw <= t.cw, `Home categories scroll inside their strip at 300px (${t.sw} > ${t.cw})`); eq(t.labels, ['People', 'Family', 'Personal']);
+    } finally { await ctx.close(); }
+  } finally { await srv.close(); }
+});
+
+await test('UX session 2 interactions @390px: results land in view and take focus, stale results clear on navigation, typed drafts survive panels, tracker fields match the type, focus returns after a re-render', async () => {
+  const srv = await serve(ROOT);
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 700 }, serviceWorkers: 'block' });
+  try {
+    await create(page, srv.url);
+    await page.click('[data-action="do"][data-kind="activity"][data-id="rest"]');
+    await page.waitForSelector('.report');
+    const r = await page.evaluate(() => ({ top: document.querySelector('.report').getBoundingClientRect().top, focused: document.activeElement === document.querySelector('.report') }));
+    ok(r.top >= -1 && r.top < 700, `result not brought into view (top ${r.top})`); ok(r.focused, 'result did not take focus');
+    await page.click('.navbtn[data-view="journal"]'); ok(!(await page.locator('.report').count()), 'stale result still shown on another page');
+    ok(await page.evaluate(() => document.activeElement.dataset.view === 'journal'), 'focus not kept on the navigation button');
+    await page.fill('form[data-form="journal"] textarea[name=text]', 'half written');
+    await page.click('[data-panel="notifications"]'); await page.keyboard.press('Escape');
+    eq(await page.inputValue('form[data-form="journal"] textarea[name=text]'), 'half written', 'draft lost after opening a panel');
+    await page.click('.navbtn[data-view="more"]'); await page.click('main [data-action="nav"][data-view="tracker"]');
+    const vis = async (n) => page.locator(`form[data-form="goal"] [name=${n}]`).isVisible();
+    ok(!(await vis('target')) && await vis('cadence'), 'habit should show cadence only');
+    await page.selectOption('form[data-form="goal"] select[name=kind]', 'goal'); ok(await vis('target') && !(await vis('cadence')), 'goal should show target only');
+    await page.selectOption('form[data-form="goal"] select[name=kind]', 'task'); ok(!(await vis('target')) && !(await vis('cadence')), 'task needs neither');
+    await page.fill('form[data-form="goal"] input[name=name]', 'Draft kept'); await page.click('[data-panel="messages"]'); await page.click('[data-action="close-panel"]');
+    eq(await page.inputValue('form[data-form="goal"] input[name=name]'), 'Draft kept', 'goal draft lost');
+    await page.click('form[data-form="goal"] button[type=submit]');
+    ok((await page.locator('[data-msg]').innerText()).includes('Created "Draft kept"'), 'no success feedback');
+    eq(await page.inputValue('form[data-form="goal"] input[name=name]'), '', 'form not cleared after success');
+    await page.click('.navbtn[data-view="more"]'); await page.click('main [data-action="nav"][data-view="tracker"]'); ok(!(await page.locator('[data-msg]').count()), 'stale tracker message after leaving and returning');
+    eq(page.errors, [], 'console errors');
+  } finally { await ctx.close(); await srv.close(); }
 });
 
 // ================================================================ 8. quest failure path
@@ -622,6 +684,175 @@ await test('QUEST deadline miss: accept from Dani, let 72 game hours pass, verif
     ok(!topics.some((t) => /Deliver/i.test(t)), 'delivery still offered after failure: ' + topics.join('|'));
     ok(topics.some((t) => /Ask about the menu/i.test(t)), 'aftermath topic missing: ' + topics.join('|'));
     eq((await readState(page)).quests.menu.status, 'failed', 'status after more play');
+    eq(page.errors, [], 'console errors');
+  } finally { await ctx.close(); await srv.close(); }
+});
+
+console.log('\n== Real-life Tracker rewards Pithe (real browser, real IndexedDB) ==');
+await test('TRACKER REWARD: complete a real-life task in Chromium: EXP rises once; double click, reload and navigation never pay again', async () => {
+  const srv = await serve(ROOT);
+  const { ctx, page } = await newPage({ serviceWorkers: 'block' });
+  try {
+    await create(page, srv.url);
+    await nav(page, 'tracker');
+    ok((await readState(page)).settings.integration === true, 'rewards on by default');
+    await page.fill('form[data-form="goal"] input[name="name"]', 'Study Excel');
+    await page.selectOption('form[data-form="goal"] select[name="kind"]', 'task');
+    ok(await page.isChecked('form[data-form="goal"] input[name="rpgLink"]'), 'link box checked by default');
+    await page.selectOption('form[data-form="goal"] select[name="linkedSkill"]', 'research');
+    await page.click('form[data-form="goal"] button[type="submit"]');
+    let st = await until(async () => { const x = await readState(page); return x && x.tracker.goals.length === 1 ? x : null; }, 10000, 'task saved');
+    eq(st.character.exp, 0, 'creating a task paid'); eq(st.tracker.goals[0].completions.length, 0);
+    const research0 = st.character.skills.research;
+    await page.dblclick('form[data-form="record"] button[type="submit"]');          // a real double click
+    st = await until(async () => { const x = await readState(page); return x.tracker.goals[0].completions.length ? x : null; }, 10000, 'completion saved');
+    await sleep(400); st = await readState(page);
+    eq(st.tracker.goals[0].completions.length, 1, 'double click recorded twice'); eq(st.character.exp, 6, 'EXP after double click');
+    eq(st.tracker.goals[0].completions[0].reward.status, 'granted');
+    eq(st.character.skills.research.level * 1000 + st.character.skills.research.exp, research0.level * 1000 + research0.exp + 4, 'skill EXP');
+    ok((await page.locator('.notice').innerText()).includes('+6 EXP'), 'player feedback');
+    await page.reload(); await page.waitForSelector('.navbtn');                      // refresh
+    st = await readState(page); eq(st.character.exp, 6, 'EXP after reload'); eq(st.tracker.goals[0].completions.length, 1);
+    await nav(page, 'tracker');
+    ok(await page.locator('form[data-form="record"] button[type="submit"]').isDisabled(), 'complete button should stay disabled after reload');
+    await nav(page, 'quests'); await nav(page, 'tracker'); await nav(page, 'character'); await nav(page, 'tracker');
+    await page.reload(); await page.waitForSelector('.navbtn');
+    st = await readState(page); eq(st.character.exp, 6, 'EXP after navigating and a second reload'); eq(st.tracker.goals[0].completions.length, 1);
+    eq(page.errors, [], 'console errors');
+  } finally { await ctx.close(); await srv.close(); }
+});
+
+
+// ================================================================ UX Session 2, Part 2 regression tests
+console.log('\n== UX Session 2, Part 2 ==');
+// Builds a save with real play on it: tracker items (one granted, one history line), a blocked action card (Rest at the closed
+// Cafe), a talk panel, and a journal entry. Fresh-save scans cannot see these states.
+async function populated(page, base, toCafe = true) {
+  await create(page, base);
+  await nav(page, 'tracker');
+  await page.fill('form[data-form="goal"] input[name=name]', 'Read 20 pages');
+  await page.click('form[data-form="goal"] button[type=submit]'); await page.waitForSelector('[data-msg]');
+  await page.locator('form[data-form="record"] button[type=submit]').first().click(); await page.waitForSelector('.notice');
+  await nav(page, 'dashboard');
+  await act(page, activity('study')); await act(page, activity('exercise')); await act(page, activity('write'));
+  if (toCafe) await act(page, '[data-action="do"][data-kind="travel"][data-to="cafe"]');
+}
+
+await test('ACCESSIBILITY (populated save): axe-core WCAG 2.0/2.1/2.2 A and AA at 300, 390 and 1280px on Home with a blocked action card, Tracker with history, Inventory, World with the talk panel, the header panels and the import confirmation', async () => {
+  const srv = await serve(ROOT);
+  try {
+    const axePath = require.resolve('axe-core/axe.min.js');
+    const report = [];
+    for (const w of [300, 390, 1280]) {
+      const { ctx, page } = await newPage({ viewport: { width: w, height: 900 }, serviceWorkers: 'block' });
+      try {
+        await populated(page, srv.url, false);   // at home: "Cook a meal" is a blocked card (no rice)
+        await page.addScriptTag({ path: axePath });
+        const scan = async (label) => {
+          const res = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'] } }));
+          for (const v of res.violations) report.push(`${label} @${w}: ${v.id} (${v.impact}) ${v.nodes.length} node(s) e.g. ${v.nodes[0].target.join(' ')}`);
+        };
+        await nav(page, 'dashboard');
+        ok(await page.locator('.action.blocked').count() > 0, 'the scenario must contain a blocked action card');
+        await scan('home with blocked card');
+        await nav(page, 'tracker'); ok(await page.locator('details').count() > 0, 'history disclosure expected'); await scan('tracker with history');
+        await nav(page, 'inventory'); await scan('inventory');
+        await nav(page, 'dashboard'); await act(page, '[data-action="do"][data-kind="travel"][data-to="cafe"]');
+        await nav(page, 'world'); await page.click('[data-action="open-talk"]'); await scan('world with talk panel');
+        await nav(page, 'character'); await scan('progress');
+        await page.click('[data-action="panel"][data-panel="notifications"]'); await scan('notifications panel'); await page.keyboard.press('Escape');
+        await nav(page, 'settings');
+        const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="export"]')]);
+        const json = fs.readFileSync(await dl.path(), 'utf8');
+        await page.fill('form[data-form="import"] textarea', json); await page.click('form[data-form="import"] button[type=submit]'); await page.waitForSelector('.modal');
+        await scan('import confirmation'); await page.keyboard.press('Escape');
+        eq(page.errors, [], 'console errors');
+      } finally { await ctx.close(); }
+    }
+    ok(!report.length, '\n      ' + report.join('\n      '));
+  } finally { await srv.close(); }
+});
+
+await test('LAYOUT @300px and @390px (populated save): no element sticks out of its panel, card or list (skills, travel buttons, talk choices)', async () => {
+  const srv = await serve(ROOT);
+  try {
+    for (const w of [300, 390]) {
+      const { ctx, page } = await newPage({ viewport: { width: w, height: 900 }, serviceWorkers: 'block' });
+      try {
+        await populated(page, srv.url);
+        const escapes = () => page.evaluate(() => {
+          const bad = [];
+          for (const el of document.querySelectorAll('main *')) {
+            const b = el.getBoundingClientRect(); if (!b.width || !b.height) continue;
+            const panel = el.closest('.panel, .action, .popover, .report, li, section');
+            const host = panel && panel !== el ? panel : el.parentElement; if (!host) continue;
+            const h = host.getBoundingClientRect();
+            if (b.right > h.right + 1 || b.left < h.left - 1) bad.push(`${el.tagName}.${el.className} "${(el.textContent || '').trim().slice(0, 24)}"`);
+          }
+          return bad.slice(0, 5);
+        });
+        for (const v of ['dashboard', 'world', 'character', 'tracker', 'inventory', 'quests']) { await nav(page, v); eq(await escapes(), [], `${v} @${w}`); }
+        await nav(page, 'world'); await page.click('[data-action="open-talk"]'); eq(await escapes(), [], `talk panel @${w}`);
+        eq(page.errors, [], 'console errors');
+      } finally { await ctx.close(); }
+    }
+  } finally { await srv.close(); }
+});
+
+await test('SAVE FAILURE: when the device refuses the write, a visible alert says so and the game stays playable; it clears when saving works again', async () => {
+  const srv = await serve(ROOT);
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block' });
+  try {
+    await create(page, srv.url); await sleep(300);
+    await page.evaluate(() => {
+      window.__orig = { tx: IDBDatabase.prototype.transaction, set: Storage.prototype.setItem };
+      IDBDatabase.prototype.transaction = function (st, m) { if (m === 'readwrite') throw new DOMException('The disk is full', 'QuotaExceededError'); return window.__orig.tx.call(this, st, m); };
+      Storage.prototype.setItem = function () { throw new DOMException('quota exceeded', 'QuotaExceededError'); };
+    });
+    await act(page, activity('rest'));
+    const alertSel = 'main > section.report.fail[role="alert"]';
+    await until(() => page.locator(alertSel).count(), 5000, 'save-failure alert');
+    ok((await page.locator(alertSel).innerText()).includes('could not be saved'), 'alert wording');
+    ok((await page.locator('#save-status').innerText()).startsWith('Save failed'), 'header status');
+    ok(await page.locator('.report').count() > 1, 'the rest result must still be shown (game still playable)');
+    await page.evaluate(() => { IDBDatabase.prototype.transaction = window.__orig.tx; Storage.prototype.setItem = window.__orig.set; });
+    await act(page, activity('rest'));
+    await until(async () => (await page.locator(alertSel).count()) === 0, 5000, 'alert to clear');
+    eq(await page.locator('#save-status').innerText(), 'Saved locally');
+    eq(page.errors, [], 'console errors');
+  } finally { await ctx.close(); await srv.close(); }
+});
+
+await test('INTERACTION details: distinct button names, Dismiss keeps keyboard focus, Export confirms, empty Import is explained, streak wording, heading order', async () => {
+  const srv = await serve(ROOT);
+  const { ctx, page } = await newPage({ viewport: { width: 390, height: 844 }, serviceWorkers: 'block', acceptDownloads: true });
+  try {
+    await populated(page, srv.url);
+    await nav(page, 'dashboard');
+    const names = await page.$$eval('main [data-action="do"]:not([disabled])', (els) => els.map((e) => e.getAttribute('aria-label') || e.textContent.trim()));
+    ok(names.length > 3, 'need several actions'); eq(new Set(names).size, names.length, 'accessible names must be unique: ' + names.join(' | '));
+    ok(names.every((n, i) => n.startsWith('Start') || n.startsWith('Go') || n.startsWith('Say') || n.length > 0), 'names present');
+    // heading order: the result title must be an h2 (not an h3 straight after the page h1)
+    ok(await page.locator('.report h2.report-title').count() > 0 && (await page.locator('.report h3').count()) === 0, 'result title heading level');
+    // Dismiss with the keyboard: focus must not fall to the page body
+    await page.focus('.report [data-action="dismiss"]'); await page.keyboard.press('Enter');
+    ok(await page.evaluate(() => document.activeElement && document.activeElement !== document.body && document.activeElement.matches('.viewtitle')), 'focus after Dismiss');
+    // streak wording: one completion = "1 day", not "1 days"
+    await nav(page, 'tracker');
+    const small = await page.locator('li.goal small').first().innerText();
+    ok(/Streak: 1 day\./.test(small), 'streak wording: ' + small);
+    // Export gives in-app feedback; the message goes away on navigation
+    await nav(page, 'settings');
+    const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-action="export"]')]);
+    ok(/^tap-protocol-save-\d{4}-\d{2}-\d{2}\.json$/.test(dl.suggestedFilename()), 'file name');
+    ok((await page.locator('[data-msg-export]').innerText()).startsWith('Export started'), 'export feedback');
+    ok(await page.locator('[data-msg-export]').getAttribute('role') === 'status', 'export feedback is a status message');
+    await nav(page, 'more'); await nav(page, 'settings');
+    eq(await page.locator('[data-msg-export]').count(), 0, 'export message should clear on navigation');
+    // Empty import: a clear instruction, nothing changes, no dialog
+    await page.click('form[data-form="import"] button[type=submit]');
+    eq((await page.locator('[data-msg]').first().innerText()), 'Paste the contents of a save file first.');
+    eq(await page.locator('.modal').count(), 0, 'no dialog for an empty import');
     eq(page.errors, [], 'console errors');
   } finally { await ctx.close(); await srv.close(); }
 });

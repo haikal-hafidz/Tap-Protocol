@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TAP Protocol</title>
   <meta name="description" content="A local-first text RPG and life tracker.">
-  <meta name="theme-color" content="#0e1016">
+  <meta name="theme-color" content="#F4F0E6">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
@@ -13,15 +13,29 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <div id="root"><p class="loading">Loading TAP Protocol</p></div>
+  <div id="root"><div class="boot" role="status" aria-live="polite"><span class="boot-mark" aria-hidden="true"></span><p class="boot-title">TAP Protocol</p><p class="boot-note">Opening your save</p></div></div>
   <noscript><p class="loading">TAP Protocol needs JavaScript enabled.</p></noscript>
   <script>
+    // Shown if the game cannot start (a file failed to load, or startup threw). Never a fake "loaded" state.
+    window.__tapFatal = function (msg) {
+      var root = document.getElementById('root'); if (!root) return;
+      root.innerHTML = '<div class="fatal" role="alert"><h1>TAP Protocol could not start</h1><p></p><button class="btn primary" type="button">Reload</button></div>';
+      root.querySelector('p').textContent = msg;
+      root.querySelector('button').addEventListener('click', function () { location.reload(); });
+    };
+    // A game file that throws while loading (not just one that is missing) must not leave the loading screen up forever.
+    window.addEventListener('error', function (e) {
+      if (document.querySelector('#root .boot')) window.__tapFatal('Startup failed: ' + ((e && e.message) || 'a game file could not run') + '. Your save has not been changed.');
+    });
+    window.addEventListener('unhandledrejection', function () {
+      if (document.querySelector('#root .boot')) window.__tapFatal('Startup failed. Your save has not been changed.');
+    });
     // ES modules do not load from file:// URLs. Explain this instead of showing "Loading" forever.
     if (location.protocol === 'file:') {
       document.getElementById('root').innerHTML = '<p class="loading">TAP Protocol cannot run when index.html is opened directly. Start a local server in this folder (python3 -m http.server 8080) and open http://localhost:8080/ instead. See README.md.</p>';
     }
   </script>
-  <script type="module" src="js/main.js"></script>
+  <script type="module" src="js/main.js" onerror="window.__tapFatal && window.__tapFatal('The game files could not be loaded. Check your connection and reload.')"></script>
   <script type="module" src="js/pwa.js"></script>
 </body>
 </html>

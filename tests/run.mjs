@@ -202,7 +202,7 @@ await test('journal: manual entries are dated; in-world reward only once per day
   ok(!act(s, 'journal', { type: 'rpg', text: '   ' }).ok, 'blank accepted');
 });
 await test('tracker: creating is not completing; real-life stays separate unless integration is on', () => {
-  const s = fresh();
+  const s = fresh({ integration: false });
   const g = R.addGoal(s, { name: 'Walk 20 minutes', kind: 'habit', cadence: 'daily', rpgLink: true, linkedSkill: 'fitness' }, '2026-10-11').goal;
   eq(g.completions.length, 0); eq(R.trackerStats(g, '2026-10-11').total, 0);
   const exp0 = s.character.exp;
@@ -221,6 +221,134 @@ await test('tracker: creating is not completing; real-life stays separate unless
   const fin = R.addGoal(s, { name: 'Ship it', kind: 'goal', target: 2 }, '2026-10-20').goal;
   R.recordCompletion(s, fin.id, '2026-10-20'); const f2 = R.recordCompletion(s, fin.id, '2026-10-21');
   ok(f2.finished && fin.completedDate === '2026-10-21'); ok(!R.recordCompletion(s, fin.id, '2026-10-22').ok);
+});
+
+// ------------------------------------------------------------------ real-life Tracker -> PITHE progression
+const linkedTask = (s, name = 'Study Excel', skill = 'research', day = '2026-10-11') => { s.settings.integration = true; return R.addGoal(s, { name, kind: 'task', rpgLink: true, linkedSkill: skill }, day).goal; };
+await test('tracker->PITHE: completing a linked one-off task changes EXP and skill through the real rules, and stores the claim', () => {
+  const s = fresh(); const g = linkedTask(s);
+  eq(g.kind, 'goal'); eq(g.target, 1, 'a one-off task is a goal with target 1');
+  const sk = s.character.skills.research; const skExp0 = sk.exp, skLv0 = sk.level, logN = s.log.length, actions0 = s.stats.actions;
+  eq(s.character.exp, 0);
+  const r = R.recordCompletion(s, g.id, '2026-10-11', 'Pivot tables');
+  ok(r.ok && r.finished && r.report, 'completion with report');
+  eq(s.character.exp, D.TRACKER_REWARD.exp, 'character EXP');
+  eq(sk.level * 1000 + sk.exp, skLv0 * 1000 + skExp0 + D.TRACKER_REWARD.skillExp, 'skill EXP');
+  eq(JSON.stringify(g.completions[0].reward), JSON.stringify({ status: 'granted', exp: 6, skill: 'research', skillExp: 4 }), 'persisted claim');
+  eq(s.log.length, logN + 1); ok(s.log[s.log.length - 1].title.startsWith('Real-life reward'), 'activity log entry'); eq(s.stats.actions, actions0 + 1);
+  ok(r.report.changes.length > 0 && r.message.includes('+6 EXP'), 'player-visible feedback');
+});
+await test('tracker->PITHE: the reward can carry a skill level-up through to an attribute (existing training rules)', () => {
+  const s = fresh(); const g = linkedTask(s, 'Portfolio', 'writing');
+  const sk = s.character.skills.writing; sk.exp = R.skillNeed(sk.level) - 1;           // one point short of a level
+  const lv0 = sk.level, prog0 = s.character.attrProgress.creativity, attr0 = s.character.attributes.creativity;
+  R.recordCompletion(s, g.id, '2026-10-11');
+  eq(sk.level, lv0 + 1, 'skill level-up');
+  ok(s.character.attrProgress.creativity !== prog0 || s.character.attributes.creativity > attr0, 'attribute training advanced');
+});
+await test('tracker->PITHE: no reward without a completion, with rewards off, or when not linked', () => {
+  const s = fresh(); s.settings.integration = true;
+  const g = R.addGoal(s, { name: 'Apply to jobs', kind: 'task', rpgLink: true, linkedSkill: 'research' }, '2026-10-11').goal;
+  eq(s.character.exp, 0, 'creating a task paid'); eq(g.completions.length, 0); eq(s.log.length, 0);
+  ok(!R.recordCompletion(s, 9999, '2026-10-11').ok, 'unknown goal'); ok(!R.recordCompletion(s, g.id, 'not-a-date').ok, 'bad date'); eq(s.character.exp, 0, 'failed attempts paid');
+  const off = fresh({ integration: false }); const g2 = R.addGoal(off, { name: 'Run', kind: 'task', rpgLink: true }, '2026-10-11').goal;   // integration off
+  R.recordCompletion(off, g2.id, '2026-10-11'); eq(off.character.exp, 0, 'paid while rewards are off'); eq(g2.completions[0].reward.status, 'disabled');
+  const un = fresh(); un.settings.integration = true; const g3 = R.addGoal(un, { name: 'Read', kind: 'task' }, '2026-10-11').goal;
+  R.recordCompletion(un, g3.id, '2026-10-11'); eq(un.character.exp, 0, 'paid while not linked'); eq(g3.completions[0].reward.status, 'not-linked');
+});
+await test('tracker->PITHE: turning rewards on later never pays completions that were already recorded', () => {
+  const s = fresh({ integration: false }); const g = R.addGoal(s, { name: 'Run', kind: 'habit', cadence: 'daily', rpgLink: true }, '2026-10-11').goal;
+  R.recordCompletion(s, g.id, '2026-10-11'); eq(s.character.exp, 0);
+  s.settings.integration = true;                                   // the player switches rewards on afterwards
+  ok(!R.recordCompletion(s, g.id, '2026-10-11').ok, 'same day cannot be recorded again'); eq(s.character.exp, 0, 'retroactive payment');
+  R.recordCompletion(s, g.id, '2026-10-12'); eq(s.character.exp, 6, 'new completion pays once'); eq(g.completions[0].reward.status, 'disabled');
+});
+await test('tracker->PITHE: repeated attempts (double click, many tries, finished goal, weekly habit) never pay twice', () => {
+  const s = fresh(); const g = linkedTask(s);
+  const first = R.recordCompletion(s, g.id, '2026-10-11'); ok(first.ok);
+  const exp1 = s.character.exp, logN = s.log.length, json = JSON.stringify(s);
+  for (let i = 0; i < 5; i++) ok(!R.recordCompletion(s, g.id, '2026-10-11').ok, 'repeat accepted');
+  ok(!R.recordCompletion(s, g.id, '2026-10-12').ok, 'finished task accepted again');
+  eq(s.character.exp, exp1); eq(s.log.length, logN); eq(JSON.stringify(s), json, 'a rejected attempt must not change the save at all');
+  const w = R.addGoal(s, { name: 'Long run', kind: 'habit', cadence: 'weekly', rpgLink: true }, '2026-10-12').goal;   // 2026-10-12 is a Monday
+  R.recordCompletion(s, w.id, '2026-10-12'); const e2 = s.character.exp;
+  ok(!R.recordCompletion(s, w.id, '2026-10-14').ok, 'second completion in the same week'); eq(s.character.exp, e2);
+  R.recordCompletion(s, w.id, '2026-10-19'); eq(s.character.exp, e2 + 6, 'next week pays again, once');
+});
+await test('tracker->PITHE: the daily cap comes from the stored claims, so moving the date back and forth cannot reset it', () => {
+  const s = fresh(); s.settings.integration = true;
+  const gs = [1, 2, 3, 4, 5].map((i) => R.addGoal(s, { name: 'T' + i, kind: 'task', rpgLink: true }, '2026-10-20').goal);
+  const paid = (g) => g.completions[0].reward.status;
+  for (const g of gs.slice(0, 4)) R.recordCompletion(s, g.id, '2026-10-20');
+  eq(gs.map((g) => (g.completions.length ? paid(g) : '-')).join(','), 'granted,granted,granted,capped,-');
+  R.recordCompletion(s, gs[4].id, '2026-10-21'); eq(paid(gs[4]), 'granted', 'a new day has a new allowance');
+  const extra = R.addGoal(s, { name: 'T6', kind: 'task', rpgLink: true }, '2026-10-20').goal;
+  R.recordCompletion(s, extra.id, '2026-10-20'); eq(paid(extra), 'capped', 'going back to a capped day paid again');
+  eq(s.character.exp, 4 * 6);
+});
+await test('tracker->PITHE: native quests keep their own objectives and rewards (a real-life task never completes or alters them)', () => {
+  const s = fresh();
+  ok(act(s, 'travel', { to: 'market' }).ok); ok(act(s, 'buy', { item: 'notebook' }).ok); ok(act(s, 'talk', { npc: 'teo', topic: 'regulars' }).ok);
+  ok(doAct(s, 'explore').ok); ok(doAct(s, 'explore').ok); ok(doAct(s, 'rest').ok); ok(act(s, 'travel', { to: 'cafe' }).ok);
+  ok(act(s, 'talk', { npc: 'dani', topic: 'job' }).ok); ok(act(s, 'talk', { npc: 'dani', topic: 'accept' }).ok);
+  const q = s.quests.menu;
+  const g = linkedTask(s, 'Draft pitch', 'negotiation');             // a skill the quest does not use
+  const questBefore = JSON.stringify(q), clockBefore = s.clock;
+  ok(R.recordCompletion(s, g.id, '2026-10-11').ok); ok(s.character.exp > 0, 'tracker paid');
+  eq(JSON.stringify(q), questBefore, 'a tracker completion changed the quest'); eq(s.clock, clockBefore, 'a tracker completion advanced game time');
+  ok(!act(s, 'talk', { npc: 'dani', topic: 'deliver' }).ok, 'quest could be delivered without its own objectives');
+  for (let i = 0; i < 3; i++) { s.needs.energy = Math.max(s.needs.energy, 60); ok(doAct(s, 'write').ok); }
+  const money0 = s.money, mgmt0 = s.character.attributes.management, trackerBefore = JSON.stringify(s.tracker);
+  ok(act(s, 'talk', { npc: 'dani', topic: 'deliver' }).ok);
+  eq(q.status, 'completed'); ok(s.money >= money0 + 60, 'quest payment'); eq(s.character.attributes.management, mgmt0 + 1, 'quest milestone');
+  eq(JSON.stringify(s.tracker), trackerBefore, 'a native quest changed the tracker');
+});
+await test('tracker->PITHE: the reward amounts are configuration (data.js), not numbers buried in the rule', () => {
+  eq(JSON.stringify(D.TRACKER_REWARD), JSON.stringify({ exp: 6, skillExp: 4, dailyCap: 3 }));
+  const saved = { ...D.TRACKER_REWARD };
+  try {
+    Object.assign(D.TRACKER_REWARD, { exp: 10, skillExp: 2, dailyCap: 1 });
+    const s = fresh(); const a = linkedTask(s, 'A'); const b = linkedTask(s, 'B');
+    R.recordCompletion(s, a.id, '2026-10-11'); eq(s.character.exp, 10); eq(a.completions[0].reward.skillExp, 2);
+    R.recordCompletion(s, b.id, '2026-10-11'); eq(s.character.exp, 10, 'configured cap of 1'); eq(b.completions[0].reward.status, 'capped');
+  } finally { Object.assign(D.TRACKER_REWARD, saved); }
+});
+
+// ---- default-on rewards, legacy preferences, cap semantics
+await test('rewards default: ON for a fresh save, an explicit OFF at creation is kept, and a stored preference survives load', () => {
+  eq(fresh().settings.integration, true, 'fresh default');
+  eq(fresh({ integration: false }).settings.integration, false, 'explicit off at creation');
+  const off = JSON.parse(JSON.stringify(fresh({ integration: false }))), on = JSON.parse(JSON.stringify(fresh({ integration: true })));
+  eq(R.migrateState(off).settings.integration, false, 'explicit disabled preference was overridden'); eq(R.migrateState(on).settings.integration, true);
+  const none = JSON.parse(JSON.stringify(fresh())); delete none.settings.integration; eq(R.migrateState(none).settings.integration, true, 'no stored preference gets the default');
+  const noSettings = JSON.parse(JSON.stringify(fresh())); delete noSettings.settings; eq(R.migrateState(noSettings).settings.integration, true);
+  const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/legacy-save.json'), 'utf8'));
+  const legacy = typeof fx.record.payload === 'string' ? JSON.parse(fx.record.payload) : fx.record.payload;
+  eq(legacy.settings.integration, false); eq(R.migrateState(legacy).settings.integration, false, 'legacy save with integration=false was switched on');
+  eq(R.migrateState(R.migrateState(JSON.parse(JSON.stringify(legacy)))).settings.integration, false, 'migration is idempotent');
+});
+await test('rewards default: a new task is paid with no setup; a legacy disabled save stays unpaid until the player enables it, and never retroactively', () => {
+  const s = fresh(); const g = R.addGoal(s, { name: 'Apply to jobs', kind: 'task', rpgLink: true }, '2026-10-11').goal;
+  eq(s.character.exp, 0); ok(R.recordCompletion(s, g.id, '2026-10-11').ok); eq(s.character.exp, 6, 'default-on reward');
+  const old = R.migrateState(JSON.parse(JSON.stringify(fresh({ integration: false })))); const h = R.addGoal(old, { name: 'Run', kind: 'habit', cadence: 'daily', rpgLink: true }, '2026-10-11').goal;
+  R.recordCompletion(old, h.id, '2026-10-11'); eq(old.character.exp, 0); eq(h.completions[0].reward.status, 'disabled');
+  old.settings.integration = true;                                                // player enables rewards later
+  eq(R.migrateState(JSON.parse(JSON.stringify(old))).character.exp, 0, 'enabling or loading paid history'); ok(!R.recordCompletion(old, h.id, '2026-10-11').ok);
+  eq(old.character.exp, 0); eq(h.completions[0].reward.status, 'disabled', 'claim must stay as recorded');
+});
+await test('cap: counts GRANTED rewards; completions past the cap are still recorded, marked capped, never queued, never re-evaluated', () => {
+  const s = fresh(); const gs = [1, 2, 3, 4, 5].map((i) => R.addGoal(s, { name: 'C' + i, kind: 'task', rpgLink: true }, '2026-10-20').goal);
+  const res = gs.map((g) => R.recordCompletion(s, g.id, '2026-10-20'));
+  ok(res.every((r) => r.ok), 'every valid completion is recorded'); ok(gs.every((g) => g.completions.length === 1 && g.completedDate === '2026-10-20'), 'all completions saved');
+  eq(gs.map((g) => g.completions[0].reward.status).join(','), 'granted,granted,granted,capped,capped'); eq(s.character.exp, 18);
+  ok(res[3].message.includes('limit') && !res[3].message.includes('granted:') && res[3].report === null, 'capped is clearly not a grant');
+  eq(s.tracker.rewardLog.n, 3, 'counter counts granted rewards only');
+  const json = JSON.stringify(s);
+  for (const g of gs) ok(!R.recordCompletion(s, g.id, '2026-10-20').ok, 'reprocessing a capped or paid completion');
+  eq(JSON.stringify(s), json, 'retries changed the save');
+  const later = R.addGoal(s, { name: 'Next day', kind: 'task', rpgLink: true }, '2026-10-21').goal; R.recordCompletion(s, later.id, '2026-10-21');
+  eq(s.character.exp, 24, 'new day pays only its own completion'); eq(gs[3].completions[0].reward.status, 'capped', 'a capped completion is never paid later');
+  const m = R.migrateState(JSON.parse(JSON.stringify(s))); eq(m.character.exp, 24, 'reload paid capped completions');
 });
 await test('skill level-ups feed attribute training; attributes cap at 10', () => {
   const s = fresh();
@@ -285,6 +413,36 @@ await test('import rejects invalid saves and accepts exports', () => {
 });
 
 // ------------------------------------------------------------------ UI through jsdom, with a simulated refresh
+await test('tracker->PITHE: reward and claim survive save, close and reopen; reopening never pays again', async () => {
+  const s = fresh(); s.settings.integration = true;
+  const g = R.addGoal(s, { name: 'Exercise', kind: 'task', rpgLink: true, linkedSkill: 'fitness' }, '2026-10-11').goal;
+  ok(R.recordCompletion(s, g.id, '2026-10-11').ok);
+  const saved = JSON.stringify(s); ok((await S.saveGame(s)).ok);
+  for (let reopen = 0; reopen < 3; reopen++) {                   // three "app launches"
+    const { state: loaded } = await S.loadGame(); const m = R.migrateState(loaded);
+    eq(JSON.stringify(m), saved, `launch ${reopen}: loading must change nothing`);
+    eq(m.character.exp, 6); eq(m.tracker.goals[0].completions[0].reward.status, 'granted');
+    ok(!R.recordCompletion(m, m.tracker.goals[0].id, '2026-10-11').ok, 'reopened save accepted the same completion'); eq(m.character.exp, 6);
+  }
+});
+await test('tracker->PITHE (legacy saves): an old save loads with all progress, its old completions are never paid retroactively, new ones pay once', async () => {
+  const fx = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests/fixtures/legacy-save.json'), 'utf8'));
+  const raw = typeof fx.record.payload === 'string' ? JSON.parse(fx.record.payload) : fx.record.payload;
+  ok(!raw.tracker.goals.some((g) => g.completions.some((c) => 'reward' in c)), 'fixture must be a pre-claim save');
+  const m = R.migrateState(JSON.parse(JSON.stringify(raw)));
+  ok(R.isValidState(m)); eq(m.character.exp, 14); eq(m.character.level, 1); eq(m.money, 25); eq(m.inventory.notebook, 1); eq(m.journal.length, 1); eq(m.tracker.goals.length, 1);
+  // an older save whose goal already has completions (written before claims existed), now with rewards switched on and the goal linked
+  const old = m.tracker.goals[0]; old.rpgLink = true; old.linkedSkill = 'fitness';
+  old.completions.push({ date: '2026-10-09', ts: '2026-10-09T08:00:00.000Z', note: 'before claims existed' }, { date: '2026-10-10', ts: '2026-10-10T08:00:00.000Z', note: '' });
+  m.settings.integration = true;
+  const again = R.migrateState(JSON.parse(JSON.stringify(m)));
+  eq(again.character.exp, 14, 'loading paid something'); eq(JSON.stringify(again.tracker.goals[0].completions), JSON.stringify(m.tracker.goals[0].completions), 'loading touched old completions');
+  ok(!R.recordCompletion(again, old.id, '2026-10-10').ok, 'an old day was recorded again'); eq(again.character.exp, 14, 'old completion paid retroactively');
+  ok(R.recordCompletion(again, old.id, '2026-10-11').ok); eq(again.character.exp, 20, 'new completion pays exactly once');
+  eq(again.tracker.goals[0].completions[0].reward, undefined, 'old completions must stay as they were');
+  ok((await S.saveGame(again)).ok); const back = R.migrateState((await S.loadGame()).state); eq(back.character.exp, 20); eq(back.character.exp, again.character.exp);
+});
+
 console.log('\n== UI flow (jsdom, real ui.js and main.js) ==');
 globalThis.__TAP_NO_AUTOBOOT__ = true;
 await S.clearGame(); // start the UI section from a clean browser profile
@@ -321,7 +479,8 @@ async function submit(formSel, values = {}) {
   f.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
   await app.settle(); await tick();
 }
-const nav = (v) => click(`[data-action="nav"][data-view="${v}"]`);
+const MORE_PAGES = ['tracker', 'quests', 'inventory', 'settings'];
+const nav = async (v) => { if (MORE_PAGES.includes(v)) await click('.navbtn[data-view="more"]'); return click(`[data-action="nav"][data-view="${v}"]`); };
 const doIt = (sel) => click(`[data-action="do"]${sel}`);
 const activity = (id) => doIt(`[data-kind="activity"][data-id="${id}"]`);
 const say = (npc, topic) => doIt(`[data-kind="talk"][data-npc="${npc}"][data-topic="${topic}"]`);
@@ -329,6 +488,7 @@ const say = (npc, topic) => doIt(`[data-kind="talk"][data-npc="${npc}"][data-top
 await test('first launch shows character creation; invalid input shows errors', async () => {
   await boot();
   ok(text().includes('TAP Protocol') && $('form[data-form="create"]'), 'no setup screen');
+  ok($('form[data-form="create"] input[name="integration"]').checked, 'real-life rewards must be pre-checked on the setup screen');
   await submit('form[data-form="create"]', { name: '' });
   ok(text().includes('Enter a character name'), 'no validation message');
   ok(app.state === null);
@@ -337,7 +497,54 @@ await test('create Pithe, enter the world, and every view renders', async () => 
   await submit('form[data-form="create"]', { name: 'Pithe', age: '24', appearance: 'Tall.', background: 'scholar', trait: 'curious' });
   ok(app.state && app.state.character.name === 'Pithe', 'character not created');
   ok(text().includes('Arrival') && text().includes('Rented Room'), 'dashboard missing');
-  for (const v of ['character', 'journal', 'tracker', 'world', 'quests', 'inventory', 'dashboard']) { await nav(v); ok($('.viewtitle').textContent.length > 0, `view ${v} empty`); }
+  for (const v of ['character', 'journal', 'tracker', 'world', 'quests', 'inventory', 'settings', 'more', 'dashboard']) { await nav(v); ok($('.viewtitle').textContent.length > 0, `view ${v} empty`); }
+});
+await test('UX session 1: Home categories (People, Family, Personal) work; Personal shows Tracker goals; Messages and Notifications panels open, close and are honest', async () => {
+  await nav('dashboard');
+  eq([...document.querySelectorAll('[aria-label="Home categories"] .tab')].map((b) => b.textContent.trim()).join(','), 'People,Family,Personal');
+  ok($('[data-action="home-tab"][data-tab="personal"]').getAttribute('aria-pressed') === 'true' && text().includes('Tracker goals'), 'Personal should be the default and show Tracker goals');
+  const nextId0 = app.state.nextId; R.addGoal(app.state, { name: 'Home goal check', kind: 'task' }, R.localDateStr(new Date()));   // removed again below so later tests see the original save
+  await nav('dashboard'); ok(text().includes('Home goal check') && $('form[data-form="record"]'), 'Personal does not surface the Tracker goal');
+  await click('[data-action="home-tab"][data-tab="people"]'); ok(text().includes('People here') && !text().includes('Tracker goals'), 'People tab');
+  await click('[data-action="home-tab"][data-tab="family"]'); ok(text().includes('no family'), 'Family tab must be honest about having no family data');
+  await click('[data-action="home-tab"][data-tab="personal"]');
+  const before = JSON.stringify(app.state);
+  await click('[data-action="panel"][data-panel="messages"]');
+  ok($('#header-panel') && $('#header-panel').textContent.includes('No messages'), 'Messages panel did not open with an honest empty state');
+  eq($('[data-panel="messages"]').getAttribute('aria-expanded'), 'true');
+  await click('[data-action="panel"][data-panel="notifications"]');
+  ok($('#header-panel h2').textContent === 'Notifications' && document.querySelectorAll('#header-panel').length === 1, 'Notifications panel did not replace Messages');
+  await click('[data-action="close-panel"]'); ok(!$('#header-panel'), 'panel did not close');
+  await click('[data-action="panel"][data-panel="messages"]');
+  document.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true })); root.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  ok(!$('#header-panel'), 'Escape did not close the panel');
+  await click('[data-action="panel"][data-panel="messages"]'); await click('[data-action="nav"][data-view="world"]'); ok(!$('#header-panel'), 'navigating should close the panel');
+  eq(JSON.stringify(app.state), before, 'opening panels changed the save');
+  app.state.tracker.goals = app.state.tracker.goals.filter((g) => g.name !== 'Home goal check'); app.state.nextId = nextId0;
+  await nav('dashboard');
+});
+await test('UX session 1: PITHE only, five-item bottom nav in order, header holds no primary navigation, navigation never touches the save', async () => {
+  const before = JSON.stringify(app.state);
+  await nav('dashboard');
+  eq([...document.querySelectorAll('.navbtn')].map((b) => b.textContent.trim()).join(' > '), 'Home > World > Journal > Progress > More', 'primary nav order');
+  eq(document.querySelectorAll('nav .navbtn').length, 5, 'primary nav must be exactly five items');
+  ok(document.querySelectorAll('header .navbtn').length === 0 && !document.querySelector('header nav'), 'header must not hold primary navigation');
+  ok($('header.appbar').textContent.includes('TAP Protocol') && /\d{4}, \d\d:\d\d/.test($('header.appbar .gametime').textContent) && $('header.appbar #save-status'), 'header lacks title, game time or save status');
+  eq([...document.querySelectorAll('header.appbar [data-action="panel"]')].map((b) => b.textContent.trim().replace(/\s+\d+$/, '')).join(','), 'Messages,Notifications', 'header must offer Messages and Notifications');
+  ok($('.statusbar').textContent.includes('Pithe') && $('.statusbar').textContent.includes('Health') && $('.statusbar [role="progressbar"]'), 'compact status summary missing');
+  ok($('.nav').compareDocumentPosition($('main')) & 2 /* nav after main */, 'bottom navigation must come after the content');
+  ok(!/\bALE\b/.test(document.body.textContent) && !document.querySelector('[data-action="space"],[name="space"]'), 'a space selector is visible');
+  for (const v of ['tracker', 'quests', 'inventory']) {
+    await nav(v);
+    eq(document.querySelector('.navbtn.on').textContent.trim(), 'More', `${v} should highlight More`);
+    ok($('header.appbar .back'), `${v} lacks a way back to More`);
+  }
+  await nav('more'); ok(text().includes('Settings and save data'), 'More lacks settings link');
+  await click('[data-action="nav"][data-view="settings"]');
+  eq(document.querySelector('.navbtn.on').textContent.trim(), 'More'); ok($('#settings') && $('[data-action="export"]') && $('form[data-form="reset"]'), 'settings and save management not under More');
+  await nav('character'); ok(!$('#settings') && !$('[data-action="export"]') && text().includes('Attributes') && text().includes('Skills'), 'Progress must show progression only');
+  await nav('dashboard');
+  eq(JSON.stringify(app.state), before, 'navigation changed the save state');
 });
 await test('perform an activity from the UI and see the actual results', async () => {
   const t0 = app.state.clock;
@@ -402,6 +609,32 @@ await test('REFRESH: reload the app and verify everything persisted', async () =
   await nav('tracker'); ok(text().includes('Stretch'));
 });
 
+await test('tracker->PITHE (real UI): enable rewards, add a task, complete it: EXP changes; repeats and a refresh never pay again', async () => {
+  await nav('tracker');
+  ok(app.state.settings.integration === true && text().includes('Rewards are enabled'), 'rewards must be on by default for a new save');
+  await click('[data-action="toggle-integration"]'); ok(!app.state.settings.integration, 'disable button'); ok(text().includes('Rewards are disabled'));
+  await click('[data-action="toggle-integration"]'); ok(app.state.settings.integration, 'enable button'); ok(text().includes('Rewards are enabled'));
+  ok($('form[data-form="goal"] input[name="rpgLink"]').checked, 'link box should start checked while rewards are on');
+  await submit('form[data-form="goal"]', { name: 'Study Excel', kind: 'task', linkedSkill: 'research' });
+  const task = app.state.tracker.goals.find((g) => g.name === 'Study Excel'); ok(task && task.target === 1 && task.rpgLink, 'task created');
+  eq(task.completions.length, 0, 'creating paid or completed');
+  const form = () => [...root.querySelectorAll('form[data-form="record"]')].find((f) => f.querySelector('[name="goal"]').value === String(task.id));
+  const exp0 = app.state.character.exp, lv0 = app.state.character.level, logN = app.state.log.length;
+  const fire = async () => { form().dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true })); await app.settle(); await tick(); };
+  await fire();
+  eq(task.completions.length, 1); eq(task.completions[0].reward.status, 'granted');
+  eq(app.state.character.level * 1000 + app.state.character.exp, lv0 * 1000 + exp0 + 6, 'EXP did not change');
+  ok(text().includes('Game reward granted') && text().includes('+6 EXP'), 'no feedback shown');
+  ok(form().querySelector('button').disabled, 'complete button must be disabled once done'); eq(app.state.log.length, logN + 1);
+  const exp1 = app.state.character.exp; const json1 = JSON.stringify(app.state);
+  await fire(); await fire();                                          // repeated submits
+  eq(JSON.stringify(app.state), json1, 'repeat submits changed the save'); ok(text().includes('already complete'));
+  await app.settle(); await tick(); await boot();                      // refresh the app
+  const reloaded = app.state.tracker.goals.find((g) => g.name === 'Study Excel');
+  eq(reloaded.completions.length, 1); eq(reloaded.completions[0].reward.status, 'granted'); eq(app.state.character.exp, exp1, 'refresh changed EXP');
+  await nav('tracker'); await fire(); eq(app.state.character.exp, exp1, 'submit after refresh paid again'); eq(reloaded.completions.length, 1);
+  await nav('quests'); await nav('tracker'); await nav('character'); eq(app.state.character.exp, exp1, 'navigating paid');
+});
 await test('CLOUD APPLY GUARD (real ui.js): a cloud save is not applied if the player acted meanwhile; a clean apply works and is saved locally', async () => {
   await app.settle();
   const mine = app.state, snapshotBefore = JSON.stringify(mine);

@@ -110,7 +110,8 @@ export function createCharacter(o = {}) {
     journal: [],
     tracker: { goals: [], rewardLog: { date: '', n: 0 } },
     log: [],
-    settings: { integration: !!o.integration },
+    // Real-life Tracker rewards are ON for a new save unless the creator explicitly turns them off.
+    settings: { integration: o.integration === undefined ? true : !!o.integration },
     stats: { collapses: 0, actions: 0 },
     nextId: 1
   };
@@ -125,7 +126,10 @@ export function isValidState(s) {
 
 // Fill in anything an older save may lack. Never discards existing data.
 export function migrateState(s) {
-  s.settings = s.settings || { integration: false };
+  // An existing true/false preference is kept exactly as saved. Only a save with no stored preference at all gets the default (on).
+  // Turning rewards on never pays anything recorded earlier: each completion carries its own one-time claim.
+  s.settings = s.settings || {};
+  if (typeof s.settings.integration !== 'boolean') s.settings.integration = true;
   s.stats = s.stats || { collapses: 0, actions: 0 };
   s.acc = Object.assign({ sat: 0, starve: 0, regen: 0, late: 0 }, s.acc);
   s.flags = s.flags || { topics: {} };
@@ -650,8 +654,9 @@ function doJournal(state, a) {
 
 function doTrackerReward(state, a) {
   const goal = state.tracker.goals.find((g) => g.id === a.goalId);
-  grantExp(state, 6);
-  if (goal && goal.linkedSkill) grantSkillExp(state, goal.linkedSkill, 4);
+  const r = D.TRACKER_REWARD;
+  grantExp(state, r.exp);
+  if (goal && goal.linkedSkill) grantSkillExp(state, goal.linkedSkill, r.skillExp);
   return { title: `Real-life reward: ${goal ? goal.name : 'goal'}`, narrative: ['A real-life completion was converted into a small in-world reward.'] };
 }
 
@@ -751,10 +756,13 @@ export function addGoal(state, o, today) {
   const name = String(o.name ?? '').trim();
   if (!name) return { ok: false, error: 'Give the goal or habit a name.' };
   if (name.length > 60) return { ok: false, error: 'The name must be 60 characters or fewer.' };
-  const kind = o.kind === 'goal' ? 'goal' : 'habit';
+  // A one-off task is stored as a goal with a target of 1, so it uses the existing completion, history and reward code.
+  const oneOff = o.kind === 'task';
+  const kind = o.kind === 'goal' || oneOff ? 'goal' : 'habit';
   const cadence = o.cadence === 'weekly' ? 'weekly' : 'daily';
   let target = 0;
-  if (kind === 'goal') {
+  if (oneOff) target = 1;
+  else if (kind === 'goal') {
     target = Number(o.target);
     if (!Number.isInteger(target) || target < 1 || target > 365) return { ok: false, error: 'A goal target must be a whole number from 1 to 365.' };
   }
@@ -779,24 +787,40 @@ export function recordCompletion(state, goalId, today, note = '', nowIso = new D
     const ws = weekStart(today);
     if (g.completions.some((c) => weekStart(c.date) === ws)) return { ok: false, error: 'Already recorded this week.' };
   }
-  g.completions.push({ date: today, ts: nowIso, note: String(note).trim().slice(0, 200) });
+  const entry = { date: today, ts: nowIso, note: String(note).trim().slice(0, 200) };
+  g.completions.push(entry);
   let finished = false;
   if (g.kind === 'goal' && g.completions.length >= g.target) { g.completedDate = today; finished = true; }
 
-  let report = null;
-  let rewardMsg = 'Recorded. No game reward (real-life tracking is separate from the RPG).';
-  if (state.settings.integration && g.rpgLink) {
-    const rl = state.tracker.rewardLog;
-    if (rl.date !== today) { rl.date = today; rl.n = 0; }
-    if (rl.n < 3) {
-      rl.n++;
-      report = execute(state, { kind: 'tracker_reward', goalId: g.id });
-      rewardMsg = `Recorded. Game reward granted (${rl.n} of 3 today).`;
-    } else rewardMsg = 'Recorded. The daily limit of 3 game rewards from real-life completions has been reached.';
-  } else if (state.settings.integration && !g.rpgLink) {
-    rewardMsg = 'Recorded. This goal is not linked to the RPG, so no game reward.';
-  }
-  return { ok: true, finished, message: finished ? `Goal complete. ${rewardMsg}` : rewardMsg, report };
+  const claim = claimTrackerReward(state, g, entry, today);
+  const rewardMsg = claim.message;
+  return { ok: true, finished, message: finished ? `Goal complete. ${rewardMsg}` : rewardMsg, report: claim.report, reward: entry.reward };
+}
+
+// Real-life reward, decided exactly once per completion. The decision is written onto the completion record itself
+// (completion.reward), in the same state object that is saved as one unit, so the reward and the proof that it was paid
+// cannot be separated by a reload, an offline period, a sync, or a conflict. Once a completion carries a `reward`
+// record it is never evaluated again: no code path pays it a second time, and completions that already existed
+// before this record was introduced (legacy saves) are never rewarded retroactively.
+// Only called from recordCompletion, for the completion it has just created.
+function claimTrackerReward(state, g, entry, today) {
+  if (entry.reward) return { report: null, message: 'Recorded. The reward for this completion was already settled.' };
+  const cfg = D.TRACKER_REWARD;
+  const settle = (status, message, extra = {}) => { entry.reward = { status, ...extra }; return { report: null, message }; };
+  if (!state.settings.integration) return settle('disabled', 'Recorded. No game reward (real-life tracking is separate from the RPG).');
+  if (!g.rpgLink) return settle('not-linked', 'Recorded. This goal is not linked to the RPG, so no game reward.');
+  const rl = state.tracker.rewardLog;
+  if (rl.date !== today) { rl.date = today; rl.n = 0; }
+  // The daily count comes from the persisted claims themselves (and the older counter), so changing the device clock back
+  // and forth cannot reset it.
+  const paidToday = state.tracker.goals.reduce((n, x) => n + x.completions.filter((c) => c.date === today && c.reward && c.reward.status === 'granted').length, 0);
+  const used = Math.max(rl.n, paidToday);
+  if (used >= cfg.dailyCap) return settle('capped', `Recorded. The daily limit of ${cfg.dailyCap} game rewards from real-life completions has been reached.`);
+  rl.n = used + 1;
+  entry.reward = { status: 'granted', exp: cfg.exp, skill: g.linkedSkill || '', skillExp: g.linkedSkill ? cfg.skillExp : 0 };
+  const report = execute(state, { kind: 'tracker_reward', goalId: g.id });
+  const skillPart = g.linkedSkill ? `, +${cfg.skillExp} ${skillName(g.linkedSkill)} skill EXP` : '';
+  return { report, message: `Recorded. Game reward granted: +${cfg.exp} EXP${skillPart} (${rl.n} of ${cfg.dailyCap} today).` };
 }
 
 export function trackerStats(g, today) {

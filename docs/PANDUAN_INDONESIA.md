@@ -11,7 +11,7 @@ Tujuan: karakter Pithe yang sama muncul di laptop dan HP. Panduan teknis lengkap
 
 ## Langkah 1. Amankan save sekarang (2 menit)
 
-Di laptop, buka game di alamat tempat Pithe Anda dimainkan, lalu: Character, Settings and save data, Export save file. Simpan file yang terunduh.
+Di laptop, buka game di alamat tempat Pithe Anda dimainkan, lalu: More, Settings and save data, Export save file. Simpan file yang terunduh.
 
 ## Langkah 2. Jalankan SQL di Supabase (sekali saja)
 

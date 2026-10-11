@@ -4,7 +4,18 @@ import * as D from './data.js';
 import * as R from './rules.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const VIEWS = [['dashboard', 'Dashboard'], ['character', 'Character'], ['journal', 'Journal'], ['tracker', 'Tracker'], ['world', 'World'], ['quests', 'Quests'], ['inventory', 'Inventory']];
+// Primary navigation: exactly these five, in this order, as a bottom bar at every width. Tracker, Quests, Inventory and
+// Settings (with save management) are pages reached through More. Progress is character progression only.
+const NAV = [['dashboard', 'Home'], ['world', 'World'], ['journal', 'Journal'], ['character', 'Progress'], ['more', 'More']];
+const MORE_PAGES = [
+  ['tracker', 'Tracker', 'Real-life habits and goals.'],
+  ['quests', 'Quests', 'Jobs and their deadlines.'],
+  ['inventory', 'Inventory', 'What you carry, and the market stall.'],
+  ['settings', 'Settings and save data', 'Rewards, export, import, cloud sync and reset.']
+];
+const HOME_TABS = [['people', 'People'], ['family', 'Family'], ['personal', 'Personal']];
+const TITLES = { dashboard: 'Home', world: 'World', journal: 'Journal', character: 'Progress', more: 'More', tracker: 'Tracker', quests: 'Quests', inventory: 'Inventory', settings: 'Settings' };
+const navOwner = (view) => MORE_PAGES.some((m) => m[0] === view) ? 'more' : view;
 const bgOf = (s) => D.BACKGROUNDS.find((b) => b.id === s.character.background);
 const traitOf = (s) => D.TRAITS.find((t) => t.id === s.character.trait);
 
@@ -16,7 +27,7 @@ function bar(v, max, cls = '', label = '') {
 export function createApp(root, deps) {
   const app = {
     state: null, view: 'dashboard', report: null, pending: null, talkNpc: null, journalTab: 'entries',
-    saveStatus: '', draft: {}, errors: [], journalError: '', trackerMsg: '', trackerError: '', importError: '', resetError: '',
+    saveStatus: '', homeTab: 'personal', panel: null, confirmDlg: null, formDrafts: {}, saveError: '', reveal: null, focusNext: null, draft: {}, errors: [], journalError: '', trackerMsg: '', trackerError: '', importError: '', resetError: '', exportMsg: '',
     chain: Promise.resolve(), recovered: false
   };
 
@@ -24,6 +35,8 @@ export function createApp(root, deps) {
   function persist() {
     app.chain = app.chain.then(() => deps.save(app.state)).then((r) => {
       app.saveStatus = r.ok ? 'Saved locally' : `Save failed: ${r.error}`;
+      const wasErr = app.saveError; app.saveError = r.ok ? '' : String(r.error || 'unknown error');
+      if (wasErr !== app.saveError && app.state) render();   // show or clear the save-failure alert
       const el = root.querySelector('#save-status');
       if (el) { el.textContent = app.saveStatus; el.classList.toggle('bad', !r.ok); }
     });
@@ -35,7 +48,7 @@ export function createApp(root, deps) {
     if (!r) return '';
     if (!r.ok) return `<section class="report fail" role="alert"><p><strong>Cannot do that.</strong> ${esc(r.error)}</p><button class="btn small" data-action="dismiss">Dismiss</button></section>`;
     return `<section class="report" aria-live="polite">
-      <div class="report-head"><h3>${esc(r.title)}</h3><button class="btn small" data-action="dismiss">Dismiss</button></div>
+      <div class="report-head"><h2 class="report-title">${esc(r.title)}</h2><button class="btn small" data-action="dismiss">Dismiss</button></div>
       ${r.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}
       ${r.notes.length ? `<ul class="notes">${r.notes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
       ${r.changes.length ? `<ul class="changes">${r.changes.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
@@ -46,31 +59,32 @@ export function createApp(root, deps) {
     const data = Object.entries(action).map(([k, v]) => `data-${k}="${esc(v)}"`).join(' ');
     const meta = p.ok ? `<p class="meta"><span class="chip">${R.formatDuration(p.minutes)}</span>${p.variable ? '<span class="chip">Outcome varies</span>' : ''}${p.changes.map((c) => `<span class="chip">${esc(c)}</span>`).join('')}${p.warnings.length ? '<span class="chip warn">Warning</span>' : ''}</p>` : `<p class="why">${esc(p.error)}</p>`;
     return `<li class="action ${p.ok ? '' : 'blocked'}"><div class="action-main"><strong>${esc(title)}</strong>${desc ? `<p>${esc(desc)}</p>` : ''}${meta}</div>
-      <button class="btn ${p.ok ? 'primary' : ''}" data-action="do" ${data} ${p.ok ? '' : 'disabled'}>${esc(label)}</button></li>`;
+      <button class="btn ${p.ok ? 'primary' : ''}" data-action="do" ${data} aria-label="${esc(label + ': ' + title)}" ${p.ok ? '' : 'disabled'}>${esc(label)}</button></li>`;
   }
 
-  function statusWindow(s) {
-    const c = s.character, n = s.needs;
-    const tags = [];
+  // Compact status summary shown above every page: who, where, money and the four meters.
+  function needTags(s) {
+    const n = s.needs, tags = [];
     if (n.energy < 20) tags.push('Exhausted: gains halved');
     if (n.satiety < 20) tags.push(n.satiety === 0 ? 'Starving: losing health' : 'Hungry');
     if (n.health < 40) tags.push('Injured');
-    return `<section class="window status" aria-label="Status">
-      <header><h2>${esc(c.name)}</h2><p class="sub">Level ${c.level}. ${esc(bgOf(s).name)}, ${esc(traitOf(s).name)}. Hardcore.</p></header>
-      <div class="needs">
-        <div><span>Health ${n.health}/100</span>${bar(n.health, 100, 'health', 'Health')}</div>
-        <div><span>Energy ${n.energy}/100</span>${bar(n.energy, 100, 'energy', 'Energy')}</div>
-        <div><span>Satiety ${n.satiety}/100</span>${bar(n.satiety, 100, 'satiety', 'Satiety')}</div>
-        <div><span>EXP ${c.exp}/${R.expNeed(c.level)}</span>${bar(c.exp, R.expNeed(c.level), 'exp', 'EXP')}</div>
-      </div>
+    return tags;
+  }
+  function statusBar(s) {
+    const c = s.character, n = s.needs, tags = needTags(s);
+    const m = (label, v, max, cls) => `<div class="st-m"><span>${label} ${v}${max === 100 ? '' : '/' + max}</span>${bar(v, max, cls, label)}</div>`;
+    return `<section class="statusbar" aria-label="Status summary">
+      <p class="st-id"><button class="who" data-action="nav" data-view="character" aria-label="${esc(c.name)}, level ${c.level}. Open Progress">${esc(c.name)}</button><span>Level ${c.level}</span><span>${esc(D.LOCATIONS[s.location].name)}</span><span>Money <b class="money">${s.money}</b></span></p>
+      <div class="st-meters">${m('Health', n.health, 100, 'health')}${m('Energy', n.energy, 100, 'energy')}${m('Satiety', n.satiety, 100, 'satiety')}${m('EXP', c.exp, R.expNeed(c.level), 'exp')}</div>
       ${tags.length ? `<p class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</p>` : ''}
-      <dl class="facts">
-        <div><dt>Date</dt><dd>${esc(R.formatClock(s.clock))}</dd></div>
-        <div><dt>Time of day</dt><dd>${esc(R.periodOf(s.clock))}</dd></div>
-        <div><dt>Location</dt><dd>${esc(D.LOCATIONS[s.location].name)}</dd></div>
-        <div><dt>Money</dt><dd class="money">${s.money}</dd></div>
-      </dl>
     </section>`;
+  }
+  // Real notifications only: derived from the current save (needs and the quest deadline). Nothing is invented.
+  function notificationsList(s) {
+    const out = needTags(s).map((t) => ({ title: t, text: 'Check Health, Energy and Satiety on this page.' }));
+    const q = R.questView(s);
+    if (q.q.status === 'active' && q.minutesLeft <= 24 * 60) out.push({ title: `${D.QUEST.name}: deadline in ${R.formatDuration(q.minutesLeft)}`, text: 'See Quests under More.' });
+    return out;
   }
 
   // ------------------------------------------------------------ setup
@@ -102,20 +116,44 @@ export function createApp(root, deps) {
         <fieldset class="window"><legend>Personality trait</legend><p class="hint">Shapes suggestions and narration. It never forces your choices.</p><div class="choices">${traits}</div></fieldset>
         <fieldset class="window"><legend>Rules</legend>
           <p><strong>Difficulty: Hardcore.</strong> Hunger, energy and health matter. You get a warning before any action that costs you something real. Failure never deletes your save.</p>
-          <label class="check"><input type="checkbox" name="integration" ${d.integration ? 'checked' : ''}> Link real-life goals to RPG rewards (optional, off by default, changeable later)</label>
+          <label class="check"><input type="checkbox" name="integration" ${d.integration === false ? '' : 'checked'}> Let real-life Tracker completions reward Pithe (on by default, changeable later)</label>
         </fieldset>
         <button class="btn primary big" type="submit">Create Pithe and begin</button>
       </form></main>`;
   }
 
   // ------------------------------------------------------------ views
+  function homeGoals(s) {
+    const today = R.localDateStr(new Date());
+    const open = s.tracker.goals.filter((g) => !g.completedDate && !R.trackerStats(g, today).doneNow);
+    open.sort((a, b) => (b.rpgLink ? 1 : 0) - (a.rpgLink ? 1 : 0));
+    const rl = s.tracker.rewardLog;
+    const used = Math.max(rl.date === today ? rl.n : 0, s.tracker.goals.reduce((n, x) => n + x.completions.filter((c) => c.date === today && c.reward && c.reward.status === 'granted').length, 0));
+    const rows = open.slice(0, 4).map((g) => `<li class="goal"><div class="attr-top"><strong>${esc(g.name)}</strong><span class="tag">${g.kind === 'goal' ? (g.target === 1 ? 'One-off task' : 'Goal') : g.cadence === 'weekly' ? 'Weekly habit' : 'Daily habit'}</span></div>
+        <form data-form="record" class="row"><input type="hidden" name="goal" value="${g.id}"><button class="btn primary" type="submit">Record completion</button>${g.rpgLink && s.settings.integration ? '<small>Linked to the RPG.</small>' : ''}</form></li>`).join('');
+    const rewardLine = s.settings.integration ? `Rewards are on: ${Math.min(used, D.TRACKER_REWARD.dailyCap)} of ${D.TRACKER_REWARD.dailyCap} paid today.` : 'Rewards are off.';
+    return `<section class="panel"><h2>Tracker goals</h2>${rows ? `<ul class="goals">${rows}</ul>` : s.tracker.goals.length ? '<p>Everything you track is done for now.</p>' : '<p>You are not tracking anything yet. Add a habit, goal or one-off task in the Tracker.</p>'}
+      ${open.length > 4 ? `<p class="hint">${open.length - 4} more in the Tracker.</p>` : ''}<p class="hint">${rewardLine}</p>
+      <button class="btn" data-action="nav" data-view="tracker">Open the full Tracker</button></section>`;
+  }
+
   function dashboardView(s) {
+    const tabs = `<div class="tabs" role="group" aria-label="Home categories">${HOME_TABS.map(([id, label]) => `<button class="tab ${app.homeTab === id ? 'on' : ''}" data-action="home-tab" data-tab="${id}" aria-pressed="${app.homeTab === id}">${label}</button>`).join('')}</div>`;
+    if (app.homeTab === 'people') {
+      const here = R.npcsHere(s).map((id) => `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong> <span class="tag">${esc(R.relationLabel(s.relations[id] || 0))}</span><p>${esc(D.NPCS[id].role)}. ${esc(D.NPCS[id].desc)}</p></div><button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`).join('');
+      const away = Object.keys(D.NPCS).filter((id) => !R.npcsHere(s).includes(id)).map((id) => { const at = R.npcLocation(id, s.clock); return `<li><strong>${esc(D.NPCS[id].name)}</strong> (${esc(D.NPCS[id].role)}): ${at ? `now at ${esc(D.LOCATIONS[at].name)}` : 'not around right now'}.</li>`; }).join('');
+      return `${tabs}<section class="panel"><h2>People here</h2>${here ? `<ul class="actions">${here}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
+        ${away ? `<section class="panel"><h2>Elsewhere</h2><ul class="plain">${away}</ul><p class="hint">Open World for travel and the full schedule.</p></section>` : ''}`;
+    }
+    if (app.homeTab === 'family') {
+      return `${tabs}<section class="panel"><h2>Family</h2><p>Pithe has no family in the Harbor Quarter yet, and this version of the world has no family members to meet.</p><p class="hint">Where Pithe comes from: ${esc(bgOf(s).circumstance)}</p></section>`;
+    }
     const acts = R.locationActivities(s).map((a) => actionCard(a.name, a.desc, { kind: 'activity', id: a.id }, R.preview(s, { kind: 'activity', id: a.id }), 'Start')).join('');
-    const here = R.npcsHere(s).map((id) => `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong><p>${esc(D.NPCS[id].role)}. ${esc(D.NPCS[id].desc)}</p></div><button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`).join('');
     const go = Object.keys(D.LOCATIONS).filter((id) => id !== s.location).map((id) => {
       const p = R.preview(s, { kind: 'travel', to: id });
       return `<button class="btn" data-action="do" data-kind="travel" data-to="${id}" ${p.ok ? '' : 'disabled'} title="${esc(p.ok ? '' : p.error)}">${esc(D.LOCATIONS[id].name)} (${R.formatDuration(D.travelMinutes(s.location, id))})</button>`;
     }).join('');
+    const blockedTravel = Object.keys(D.LOCATIONS).filter((id) => id !== s.location).map((id) => ({ id, p: R.preview(s, { kind: 'travel', to: id }) })).filter((x) => !x.p.ok).map((x) => `<li><small>${esc(D.LOCATIONS[x.id].name)}: ${esc(x.p.error)}</small></li>`).join('');
     const q = R.questView(s);
     const questCard = q.q.status === 'active'
       ? `<p><strong>${esc(D.QUEST.name)}</strong>. Deadline in ${R.formatDuration(q.minutesLeft)}.</p><ul class="objectives">${q.objectives.map((o) => `<li class="${o.done ? 'done' : ''}">${o.done ? '[done]' : '[ ]'} ${esc(o.label)}</li>`).join('')}</ul>`
@@ -123,14 +161,13 @@ export function createApp(root, deps) {
         : `<p><strong>${esc(D.QUEST.name)}</strong>: ${q.q.status === 'completed' ? 'completed' : 'failed'}. See Quests for details.</p>`;
     const sug = R.suggestions(s);
     const recent = s.log.slice(-5).reverse();
-    return `${statusWindow(s)}
+    return `${tabs}${homeGoals(s)}
       <div class="cols">
         <section class="panel"><h2>Active quest</h2>${questCard}</section>
         <section class="panel"><h2>Suggestions</h2>${sug.length ? `<ul class="plain">${sug.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p>Nothing pressing.</p>'}</section>
       </div>
-      <section class="panel"><h2>Go somewhere</h2><div class="row">${go}</div></section>
+      <section class="panel"><h2>Go somewhere</h2><div class="row">${go}</div>${blockedTravel ? `<ul class="plain">${blockedTravel}</ul>` : ''}</section>
       <section class="panel"><h2>Actions at ${esc(D.LOCATIONS[s.location].name)}</h2><ul class="actions">${acts}</ul></section>
-      <section class="panel"><h2>People here</h2>${here ? `<ul class="actions">${here}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
       <section class="panel"><h2>Recent events</h2>${recent.length ? `<ul class="history">${recent.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> ${esc(l.title)}${l.changes.length ? `<small>${esc(l.changes.filter((c) => !c.startsWith('Time ')).join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>Nothing has happened yet.</p>'}</section>`;
   }
 
@@ -152,13 +189,17 @@ export function createApp(root, deps) {
       <section class="panel"><h2>Attributes</h2><p class="hint">A skill level-up adds training to its attribute. The attribute rises when training equals its current value.</p><div class="cols3">${attrs}</div></section>
       <section class="panel"><h2>Skills</h2><ul class="skills">${skills}</ul></section>
       <section class="panel"><h2>Recent progression</h2>${recent.length ? `<ul class="history">${recent.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> ${esc(l.title)}<small>${esc(l.changes.filter((x) => !x.startsWith('Time ') && !x.startsWith('Energy') && !x.startsWith('Satiety') && !x.startsWith('Health')).join('; '))}</small></li>`).join('')}</ul>` : '<p>No progression yet.</p>'}</section>
-      <section class="panel" id="settings"><h2>Settings and save data</h2>
+      `;
+  }
+
+  function settingsView(s) {
+    return `<section class="panel" id="settings"><h2>Settings and save data</h2>
         <p>Real-life tracker rewards: <strong>${s.settings.integration ? 'Enabled' : 'Disabled'}</strong>. When enabled, a recorded real-life completion on a goal you linked to the RPG gives a small reward, up to 3 per real day.</p>
         <button class="btn" data-action="toggle-integration">${s.settings.integration ? 'Disable' : 'Enable'} real-life rewards</button>
         <p class="hint">Storage: ${esc(deps.storageMode())}. Export your save regularly. Clearing browser data erases it.</p>
-        <div class="row"><button class="btn" data-action="export">Export save file</button></div>
-        <form data-form="import" class="stack"><label>Import a save (paste JSON). This replaces the current game.<textarea name="json" rows="3"></textarea></label>${app.importError ? `<p class="error">${esc(app.importError)}</p>` : ''}<button class="btn" type="submit">Import save</button></form>
-        <form data-form="reset" class="stack"><label>Delete this save. Type RESET to confirm.<input name="confirm" autocomplete="off"></label>${app.resetError ? `<p class="error">${esc(app.resetError)}</p>` : ''}<button class="btn danger" type="submit">Delete save</button></form>
+        <div class="row"><button class="btn" data-action="export">Export save file</button></div>${app.exportMsg ? `<p class="notice" role="status" data-msg-export>${esc(app.exportMsg)}</p>` : ''}
+        <form data-form="import" class="stack"><label>Import a save (paste JSON). This replaces the current game.<textarea name="json" rows="3"></textarea></label>${app.importError ? `<p class="error" role="alert" data-msg>${esc(app.importError)}</p>` : ''}<button class="btn" type="submit">Import save</button></form>
+        <form data-form="reset" class="stack"><label>Delete this save. Type RESET to confirm.<input name="confirm" autocomplete="off"></label>${app.resetError ? `<p class="error" role="alert" data-msg>${esc(app.resetError)}</p>` : ''}<button class="btn danger" type="submit">Delete save</button></form>
       </section>
       ${deps.cloudPanel ? deps.cloudPanel() : ''}`;
   }
@@ -175,10 +216,18 @@ export function createApp(root, deps) {
         <label>Type<select name="type"><option value="rpg">In-world entry (Pithe writes it, takes 10 game minutes)</option><option value="real">Real-life reflection (no game time, no rewards)</option></select></label>
         <label>Title (optional)<input name="title" maxlength="80"></label>
         <label>Entry<textarea name="text" rows="5" maxlength="4000" required></textarea></label>
-        ${app.journalError ? `<p class="error">${esc(app.journalError)}</p>` : ''}
+        ${app.journalError ? `<p class="error" role="alert" data-msg>${esc(app.journalError)}</p>` : ''}
         <button class="btn primary" type="submit">Save entry</button>
       </form><p class="hint">The first in-world entry each game day gives a small EXP reward. Real-life reflections never do.</p></section>
       <section class="panel"><h2>Entries</h2>${entries.length ? `<ul class="entries">${entries.map((e) => `<li><div class="attr-top"><strong>${esc(e.title)}</strong><span class="tag">${e.type === 'real' ? 'Real life' : 'In-world'}</span></div><small>${esc(e.realDate)} ${esc(e.realTime)} | Game time: ${esc(e.gameTime)}</small><p class="story pre">${esc(e.text)}</p></li>`).join('')}</ul>` : '<p>No entries yet. Write the first one above.</p>'}</section>`;
+  }
+
+  // What a completion earned, from the persisted reward record. Completions saved before rewards were recorded have none.
+  function rewardLabel(c) {
+    const r = c.reward;
+    if (!r) return 'No reward recorded';
+    if (r.status === 'granted') return `+${r.exp} EXP${r.skill ? `, +${r.skillExp} ${D.SKILLS.find((k) => k.id === r.skill)?.name || r.skill}` : ''}`;
+    return { capped: 'Daily reward limit reached', 'not-linked': 'Not linked to the RPG', disabled: 'Rewards were off' }[r.status] || 'No reward';
   }
 
   function trackerView(s) {
@@ -190,19 +239,20 @@ export function createApp(root, deps) {
       const label = g.completedDate ? 'Goal complete' : st.doneNow ? (g.cadence === 'weekly' && g.kind === 'habit' ? 'Done this week' : 'Done today') : 'Record completion';
       const prog = g.kind === 'goal' ? `<div class="attr-top"><span>Progress</span><b>${g.completions.length}/${g.target}</b></div>${bar(g.completions.length, g.target, '', 'Progress: ' + g.name)}` : '';
       return `<li class="goal"><div class="attr-top"><strong>${esc(g.name)}</strong><span class="tag">${g.kind === 'goal' ? 'Goal' : g.cadence === 'weekly' ? 'Weekly habit' : 'Daily habit'}</span></div>
-        <small>Created ${esc(g.createdDate)}. Total completions: ${st.total}. Streak: ${st.streak} ${st.unit}.${g.rpgLink ? ' Linked to the RPG.' : ''}</small>${prog}
+        <small>Created ${esc(g.createdDate)}. Total completions: ${st.total}. Streak: ${st.streak} ${st.streak === 1 ? st.unit.replace(/s$/, '') : st.unit}.${g.rpgLink ? ' Linked to the RPG.' : ''}</small>${prog}
         <div class="strip" aria-label="Last 14 days">${st.last14.map((d) => `<span class="cell ${d.done ? 'on' : ''}" title="${d.date}"></span>`).join('')}</div>
-        <form data-form="record" class="row"><input type="hidden" name="goal" value="${g.id}"><input name="note" placeholder="Optional note" maxlength="200"><button class="btn ${disabled ? '' : 'primary'}" type="submit" ${disabled ? 'disabled' : ''}>${label}</button></form>
-        ${g.completions.length ? `<details><summary>History (${g.completions.length})</summary><ul class="history">${[...g.completions].reverse().slice(0, 30).map((c) => `<li><span class="when">${esc(c.date)}</span> ${esc(c.note)}</li>`).join('')}</ul></details>` : ''}</li>`;
+        <form data-form="record" class="row"><input type="hidden" name="goal" value="${g.id}"><input name="note" placeholder="Optional note" aria-label="Optional note for ${esc(g.name)}" maxlength="200"><button class="btn ${disabled ? '' : 'primary'}" type="submit" ${disabled ? 'disabled' : ''}>${label}</button></form>
+        ${g.completions.length ? `<details><summary>History (${g.completions.length})</summary><ul class="history">${[...g.completions].reverse().slice(0, 30).map((c) => `<li><span class="when">${esc(c.date)}</span> ${esc(c.note)} <span class="tag">${esc(rewardLabel(c))}</span></li>`).join('')}</ul></details>` : ''}</li>`;
     }).join('');
-    return `<section class="panel"><h2>Real-life tracker</h2><p>Track real habits and goals here. This is separate from Pithe's progress. ${s.settings.integration ? 'Rewards are enabled: a goal you link to the RPG gives a small reward when you record a completion (max 3 per day).' : 'Rewards are disabled, so nothing here changes the game. You can enable them in Character, Settings.'}</p>
-      ${app.trackerMsg ? `<p class="notice">${esc(app.trackerMsg)}</p>` : ''}${app.trackerError ? `<p class="error">${esc(app.trackerError)}</p>` : ''}
+    return `<section class="panel"><h2>Real-life tracker</h2><p>Track your real habits, goals and one-off tasks here. ${s.settings.integration ? `Rewards are enabled: recording a completion of an item you linked to the RPG gives Pithe ${D.TRACKER_REWARD.exp} EXP and, if you chose a skill, ${D.TRACKER_REWARD.skillExp} skill EXP (each completion pays once; max ${D.TRACKER_REWARD.dailyCap} paid per day).` : 'Rewards are disabled, so nothing here changes Pithe yet.'}</p>
+      <p><button class="btn" data-action="toggle-integration">${s.settings.integration ? 'Disable' : 'Enable'} real-life rewards</button></p>
+      ${app.trackerMsg ? `<p class="notice" role="status" data-msg>${esc(app.trackerMsg)}</p>` : ''}${app.trackerError ? `<p class="error" role="alert" data-msg>${esc(app.trackerError)}</p>` : ''}
       <form data-form="goal" class="stack">
         <label>Name<input name="name" maxlength="60" required></label>
-        <div class="row"><label>Type<select name="kind"><option value="habit">Habit (repeats)</option><option value="goal">Goal (finishes after N completions)</option></select></label>
-        <label>Habit cadence<select name="cadence"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
-        <label>Goal target (completions)<input name="target" type="number" min="1" max="365" value="10"></label></div>
-        <div class="row"><label class="check"><input type="checkbox" name="rpgLink" ${s.settings.integration ? '' : 'disabled'}> Link to RPG rewards ${s.settings.integration ? '' : '(enable rewards in Settings first)'}</label>
+        <div class="row"><label>Type<select name="kind" aria-describedby="kind-hint"><option value="habit">Habit (repeats)</option><option value="goal">Goal (finishes after N completions)</option><option value="task">One-off task (done after one completion)</option></select><small id="kind-hint">Cadence applies to habits only. Target applies to goals only.</small></label>
+        <label data-kinds="habit">Habit cadence<select name="cadence"><option value="daily">Daily</option><option value="weekly">Weekly</option></select></label>
+        <label data-kinds="goal">Goal target (completions)<input name="target" type="number" min="1" max="365" value="10"></label></div>
+        <div class="row"><label class="check"><input type="checkbox" name="rpgLink" ${s.settings.integration ? 'checked' : 'disabled'}> Link to RPG rewards ${s.settings.integration ? '' : '(enable rewards in Settings first)'}</label>
         <label>Skill that gets the reward<select name="linkedSkill">${skillOpts}</select></label></div>
         <button class="btn primary" type="submit">Create</button>
       </form></section>
@@ -269,7 +319,41 @@ export function createApp(root, deps) {
       <section class="panel"><h2>Lantern Market stall</h2>${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}<p class="hint">Teo trades here 07:00-15:00 (Mon-Sat) and on Saturday 17:00-22:00. You must be at the market. Selling pays about half the price.</p><ul class="actions">${shop}</ul></section>`;
   }
 
+  function moreView() {
+    const items = MORE_PAGES.map(([id, label, desc]) => `<li class="action"><div class="action-main"><strong>${label}</strong><p>${desc}</p></div><button class="btn primary" data-action="nav" data-view="${id}" aria-label="Open ${esc(label)}">Open</button></li>`).join('');
+    return `<section class="panel"><h2>Other pages</h2><ul class="actions">${items}</ul></section>`;
+  }
+
+  function headerHtml(s) {
+    const back = navOwner(app.view) === 'more' && app.view !== 'more' ? '<button class="btn small back" data-action="nav" data-view="more">Back to More</button>' : '';
+    const nCount = notificationsList(s).length;
+    const tool = (id, label, extra = '') => `<button class="toolbtn ${app.panel === id ? 'on' : ''}" data-action="panel" data-panel="${id}" aria-expanded="${app.panel === id}" aria-controls="header-panel">${label}${extra}</button>`;
+    return `<header class="appbar"><div class="appbar-id"><p class="apptitle">TAP Protocol</p><p class="gametime" aria-label="Game time">${esc(R.formatClock(s.clock))}, ${esc(R.periodOf(s.clock).toLowerCase())}</p></div>
+      <div class="appbar-tools">${tool('messages', 'Messages')}${tool('notifications', 'Notifications', nCount ? ` <span class="badge" aria-label="${nCount} new">${nCount}</span>` : '')}</div>
+      <div class="appbar-sub">${back}<p id="save-status" class="savestat" role="status">${esc(app.saveStatus)}</p></div></header>`;
+  }
+
+  function panelHtml(s) {
+    if (!app.panel) return '';
+    let title, body;
+    if (app.panel === 'messages') {
+      title = 'Messages';
+      body = '<p>No messages. Nobody has written to Pithe, and messaging is not part of this version of the game yet.</p>';
+    } else {
+      title = 'Notifications';
+      const list = notificationsList(s);
+      body = list.length ? `<ul class="plain">${list.map((n) => `<li><strong>${esc(n.title)}</strong><small>${esc(n.text)}</small></li>`).join('')}</ul>` : '<p>No notifications. Warnings about your needs and quest deadlines appear here when they matter.</p>';
+    }
+    return `<section class="popover" id="header-panel" role="region" aria-labelledby="hp-title"><div class="report-head"><h2 id="hp-title">${title}</h2><button class="btn small" data-action="close-panel">Close</button></div>${body}</section>`;
+  }
+
   function modalHtml() {
+    if (app.confirmDlg) {
+      const d = app.confirmDlg;
+      return `<div class="modal-back"><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc"><h2 id="modal-title">${esc(d.title)}</h2>
+      <div id="modal-desc">${d.lines.map((l) => `<p>${esc(l)}</p>`).join('')}</div>
+      <div class="row"><button class="btn danger" data-action="confirm">${esc(d.confirmLabel)}</button><button class="btn" data-action="cancel">Cancel</button></div></div></div>`;
+    }
     if (!app.pending) return '';
     const { title, p } = app.pending;
     return `<div class="modal-back"><div class="modal" role="alertdialog" aria-modal="true" aria-labelledby="modal-title" aria-describedby="modal-desc"><h2 id="modal-title">Warning: ${esc(title)}</h2>
@@ -282,18 +366,69 @@ export function createApp(root, deps) {
   function render() {
     if (!app.state) { root.innerHTML = setupHtml(); return; }
     const s = app.state;
-    const body = { dashboard: dashboardView, character: characterView, journal: journalView, tracker: trackerView, world: worldView, quests: questsView, inventory: inventoryView }[app.view](s);
-    const nav = VIEWS.map(([id, label]) => `<button class="navbtn ${app.view === id ? 'on' : ''}" data-action="nav" data-view="${id}" ${app.view === id ? 'aria-current="page"' : ''}>${label}</button>`).join('');
-    root.innerHTML = `<div class="app"${app.pending ? ' inert aria-hidden="true"' : ''}>
-      <nav class="nav" aria-label="Main"><div class="brand">TAP Protocol</div><div class="navlist">${nav}</div><p id="save-status" class="savestat">${esc(app.saveStatus)}</p></nav>
-      <main class="main" id="main" tabindex="-1"><h1 class="viewtitle">${VIEWS.find((v) => v[0] === app.view)[1]}</h1>${reportHtml(app.report)}${body}</main></div>${modalHtml()}`;
+    const body = { dashboard: dashboardView, character: characterView, journal: journalView, tracker: trackerView, world: worldView, quests: questsView, inventory: inventoryView, settings: settingsView, more: moreView }[app.view](s);
+    const here = navOwner(app.view);
+    const keep = focusKey();
+    captureDrafts();
+    const nav = NAV.map(([id, label]) => `<button class="navbtn ${here === id ? 'on' : ''}" data-action="nav" data-view="${id}" ${here === id ? 'aria-current="page"' : ''}>${label}</button>`).join('');
+    root.innerHTML = `<div class="app"${app.pending || app.confirmDlg ? ' inert aria-hidden="true"' : ''}>
+      <main class="main" id="main" tabindex="-1">${headerHtml(s)}${app.saveError ? `<section class="report fail" role="alert"><p><strong>Your last change could not be saved on this device.</strong> ${esc(app.saveError)}</p><p class="hint">Keep this tab open and use More, Settings and save data, Export save file to keep a copy.</p></section>` : ''}${panelHtml(s)}${statusBar(s)}<h1 class="viewtitle">${TITLES[app.view]}</h1>${reportHtml(app.report)}${body}</main>
+      <nav class="nav" aria-label="Main"><div class="navlist">${nav}</div></nav></div>${modalHtml()}`;
+    restoreDrafts();
     manageFocus();
+    const gf = root.querySelector('form[data-form="goal"]'); if (gf) syncKindFields(gf);
+    if (app.reveal) {
+      // New feedback (a result, an error, a confirmation) may be far from the button that was pressed: bring it into view and
+      // move focus to it so keyboard and screen-reader users land on it.
+      const el = root.querySelector(app.reveal); app.reveal = null;
+      if (el && !app.pending && !app.confirmDlg) { el.setAttribute('tabindex', '-1'); el.focus({ preventScroll: true }); if (el.scrollIntoView) el.scrollIntoView({ block: 'start' }); }
+    }
+    if (app.focusNext) {
+      const f = app.focusNext; app.focusNext = null;
+      const el = f === 'panel' ? root.querySelector('#header-panel [data-action="close-panel"]') : root.querySelector(`[data-action="panel"][data-panel="${f}"]`);
+      if (el) el.focus({ preventScroll: true });
+    }
+    // Every render rebuilds the page, so keyboard focus would fall back to the top of the document. Put it back on the same control.
+    if (keep && (!document.activeElement || document.activeElement === document.body)) { const again = root.querySelector(keep); if (again) again.focus({ preventScroll: true }); }
+  }
+
+  // Text typed into the Journal, Tracker and Import forms survives re-renders (opening a panel, cancelling a dialog, a failed
+  // submit, visiting another page). It is dropped only when that form is submitted successfully.
+  const DRAFT_FORMS = ['journal', 'goal', 'import'];
+  function captureDrafts() {
+    for (const kind of DRAFT_FORMS) {
+      if (skipCapture.delete(kind)) continue;
+      const f = root.querySelector(`form[data-form="${kind}"]`); if (!f) continue;
+      const d = {};
+      f.querySelectorAll('[name]').forEach((el) => { if (el.disabled) return; if (el.type === 'checkbox') d[el.name] = el.checked; else if (el.type !== 'hidden') d[el.name] = el.value; });
+      app.formDrafts[kind] = d;
+    }
+  }
+  function restoreDrafts() {
+    for (const kind of DRAFT_FORMS) {
+      const d = app.formDrafts[kind], f = root.querySelector(`form[data-form="${kind}"]`);
+      if (!d || !f) continue;
+      f.querySelectorAll('[name]').forEach((el) => { if (!(el.name in d)) return; if (el.type === 'checkbox') { if (!el.disabled) el.checked = d[el.name]; } else if (el.type !== 'hidden') el.value = d[el.name]; });
+    }
+  }
+  const skipCapture = new Set();
+  const clearDraft = (kind) => { delete app.formDrafts[kind]; skipCapture.add(kind); };
+
+  // A selector that finds the focused control again after a re-render (controls identified by data attributes or by name in a form).
+  function focusKey() {
+    const a = document.activeElement;
+    if (!a || a === document.body || !root.contains(a) || app.pending || app.confirmDlg) return null;
+    if (a.classList && a.classList.contains('navbtn')) return `.navbtn[data-view="${cssEsc(a.dataset.view)}"]`;
+    if (a.dataset && a.dataset.action) return selectorFor(a);
+    const f = a.closest && a.closest('form[data-form]');
+    if (f && a.name && !f.querySelector('input[name="goal"]')) return `form[data-form="${f.dataset.form}"] [name="${cssEsc(a.name)}"]`;
+    return null;
   }
 
   // Focus handling for the warning dialog: move focus in when it opens (onto Cancel, the safe choice) and
   // back to the control that opened it when it closes. The rest of the page is inert while it is open.
   function manageFocus() {
-    if (app.pending) {
+    if (app.pending || app.confirmDlg) {
       app.modalOpen = true;
       const safe = root.querySelector('.modal [data-action="cancel"]');
       if (safe) safe.focus();
@@ -309,9 +444,13 @@ export function createApp(root, deps) {
     return '[' + Object.entries(el.dataset).map(([k, v]) => `data-${k.replace(/[A-Z]/g, (c) => '-' + c.toLowerCase())}="${cssEsc(v)}"`).join('][') + ']';
   }
 
+  function closePanel(returnFocus) {
+    const id = app.panel; app.panel = null; app.focusNext = returnFocus ? id : null; render();
+  }
+
   function onKeydown(e) {
-    if (!app.pending) return;
-    if (e.key === 'Escape') { e.preventDefault(); app.pending = null; render(); return; }
+    if (!app.pending && !app.confirmDlg) { if (e.key === 'Escape' && app.panel) { e.preventDefault(); closePanel(true); } return; }
+    if (e.key === 'Escape') { e.preventDefault(); app.pending = null; app.confirmDlg = null; render(); return; }
     if (e.key !== 'Tab') return;
     const items = [...root.querySelectorAll('.modal button:not(:disabled)')];
     if (!items.length) return;
@@ -326,10 +465,11 @@ export function createApp(root, deps) {
 
   function runAction(action, force = false) {
     const p = R.preview(app.state, action);
-    if (!p.ok) { app.report = { ok: false, error: p.error }; render(); return; }
+    if (!p.ok) { app.report = { ok: false, error: p.error }; app.reveal = '.report'; render(); return; }
     if (p.warnings.length && !force) { app.pending = { action, p, title: titleOf(action) }; render(); return; }
     app.report = R.execute(app.state, action);
     if (app.talkNpc && R.npcLocation(app.talkNpc, app.state.clock) !== app.state.location) app.talkNpc = null;
+    app.reveal = '.report';
     render();
     persist();
   }
@@ -343,19 +483,38 @@ export function createApp(root, deps) {
 
   function onClick(e) {
     const el = e.target.closest('[data-action]');
-    if (!el || el.disabled || !app.state) return;
+    if (!app.state) return;
+    // A click outside an open Messages/Notifications panel (and not on its own buttons) closes it.
+    if (app.panel && !e.target.closest('#header-panel') && !(el && el.dataset.action === 'panel')) { app.panel = null; if (!el || el.disabled) render(); }
+    if (!el || el.disabled) return;
     const a = el.dataset.action;
-    if (a === 'nav') { app.view = el.dataset.view; app.talkNpc = app.view === 'world' ? app.talkNpc : null; render(); window.scrollTo && window.scrollTo(0, 0); }
+    if (a === 'panel') { const id = el.dataset.panel; if (app.panel === id) closePanel(true); else { app.panel = id; app.focusNext = 'panel'; render(); } }
+    else if (a === 'close-panel') closePanel(true);
+    else if (a === 'home-tab') { app.homeTab = el.dataset.tab; render(); }
+    else if (a === 'nav') {
+      if (app.view !== el.dataset.view) { app.report = null; app.trackerMsg = ''; app.trackerError = ''; app.journalError = ''; app.importError = ''; app.resetError = ''; app.exportMsg = ''; }
+      app.view = el.dataset.view; app.talkNpc = app.view === 'world' ? app.talkNpc : null; render();
+      const target = el.dataset.anchor && root.querySelector('#' + el.dataset.anchor);
+      if (target && target.scrollIntoView) target.scrollIntoView(); else window.scrollTo && window.scrollTo(0, 0);
+    }
     else if (a === 'do') { app.lastTrigger = selectorFor(el); runAction(readAction(el)); }
-    else if (a === 'confirm') { const act = app.pending.action; app.pending = null; runAction(act, true); }
-    else if (a === 'cancel') { app.pending = null; render(); }
-    else if (a === 'dismiss') { app.report = null; render(); }
+    else if (a === 'confirm') {
+      if (app.confirmDlg) { const run = app.confirmDlg.run; app.confirmDlg = null; run(); }
+      else { const act = app.pending.action; app.pending = null; runAction(act, true); }
+    }
+    else if (a === 'cancel') { app.pending = null; app.confirmDlg = null; render(); }
+    else if (a === 'dismiss') { app.report = null; app.reveal = '.viewtitle'; render(); }
     else if (a === 'open-talk') { app.talkNpc = el.dataset.npc; app.view = 'world'; render(); }
     else if (a === 'close-talk') { app.talkNpc = null; render(); }
     else if (a === 'tab') { app.journalTab = el.dataset.tab; render(); }
     else if (a === 'toggle-integration') { app.state.settings.integration = !app.state.settings.integration; render(); persist(); }
-    else if (a === 'export') deps.download(`tap-protocol-save-${R.localDateStr()}.json`, deps.exportJson(app.state));
+    else if (a === 'export') { const fname = `tap-protocol-save-${R.localDateStr()}.json`; deps.download(fname, deps.exportJson(app.state)); app.exportMsg = `Export started: ${fname}. Your browser saves it to its usual download location. If nothing arrives, check the browser's downloads list or its permission to download files.`; app.reveal = '[data-msg-export]'; render(); }
   }
+
+  // A double click on a submit button re-submits the freshly emptied form a moment after the first (successful) submit.
+  // That second, empty submit must not replace the success message with a confusing "enter a name" error.
+  const lastOk = {};
+  const justDone = (kind) => Date.now() - (lastOk[kind] || 0) < 700;
 
   function onSubmit(e) {
     const f = e.target.closest && e.target.closest('form[data-form]');
@@ -366,37 +525,60 @@ export function createApp(root, deps) {
     if (kind === 'create') {
       app.draft = { name: fd.get('name'), age: fd.get('age'), appearance: fd.get('appearance'), background: fd.get('background'), trait: fd.get('trait'), integration: fd.get('integration') === 'on' };
       const res = R.createCharacter(app.draft);
-      if (!res.ok) { app.errors = res.errors; render(); return; }
-      app.errors = []; app.state = res.state; app.view = 'dashboard';
+      if (!res.ok) { app.errors = res.errors; app.reveal = '.errors'; render(); return; }
+      app.errors = []; app.state = res.state; app.view = 'dashboard'; app.reveal = '.report';
       app.report = { ok: true, title: 'Arrival', narrative: [`You step off the last bus into the Harbor Quarter. It is early on Monday 4 March 2030, and the lane is still wet. ${res.intro}`, 'Find work, find food and find out what this place has for you.'], notes: [], changes: [] };
       render(); persist();
     } else if (kind === 'journal') {
       const r = R.execute(app.state, { kind: 'journal', type: fd.get('type'), title: fd.get('title'), text: fd.get('text'), now: new Date() });
-      if (!r.ok) { app.journalError = r.error; render(); return; }
-      app.journalError = ''; app.report = r; render(); persist();
+      if (!r.ok) { if (justDone('journal') && !String(fd.get('text') || '').trim()) return; app.journalError = r.error; app.reveal = '[data-msg]'; render(); return; }
+      lastOk.journal = Date.now(); clearDraft('journal'); app.journalError = ''; app.report = r; app.reveal = '.report'; render(); persist();
     } else if (kind === 'goal') {
       const r = R.addGoal(app.state, { name: fd.get('name'), kind: fd.get('kind'), cadence: fd.get('cadence'), target: fd.get('target'), rpgLink: fd.get('rpgLink') === 'on', linkedSkill: fd.get('linkedSkill') }, R.localDateStr(new Date()));
+      if (!r.ok && justDone('goal') && !String(fd.get('name') || '').trim()) return;
+      if (r.ok) { lastOk.goal = Date.now(); clearDraft('goal'); }
       app.trackerError = r.ok ? '' : r.error; app.trackerMsg = r.ok ? `Created "${r.goal.name}". It is not complete until you record it.` : '';
-      render(); if (r.ok) persist();
+      if (r.ok) app.report = null;
+      app.reveal = '[data-msg]'; render(); if (r.ok) persist();
     } else if (kind === 'record') {
       const r = R.recordCompletion(app.state, Number(fd.get('goal')), R.localDateStr(new Date()), fd.get('note') || '');
       app.trackerError = r.ok ? '' : r.error; app.trackerMsg = r.ok ? r.message : '';
-      if (r.ok && r.report) app.report = r.report;
-      render(); if (r.ok) persist();
+      if (r.ok) app.report = r.report || null;
+      app.reveal = r.ok && r.report ? '.report' : '[data-msg]'; render(); if (r.ok) persist();
     } else if (kind === 'import') {
-      const r = deps.parseImport(String(fd.get('json') || ''));
-      if (!r.ok) { app.importError = r.error; render(); return; }
-      app.importError = ''; app.state = r.state; app.report = { ok: true, title: 'Save imported', narrative: [], notes: [], changes: [] }; render(); persist();
+      const raw = String(fd.get('json') || '');
+      const r = raw.trim() ? deps.parseImport(raw) : { ok: false, error: 'Paste the contents of a save file first.' };
+      if (!r.ok) { app.importError = r.error; app.reveal = '[data-msg]'; render(); return; }
+      app.importError = '';
+      // Importing replaces the whole current game. Say exactly what will be replaced and with what, and ask first.
+      const inc = r.state, cur = app.state;
+      app.lastTrigger = 'form[data-form="import"] button[type="submit"]';
+      app.confirmDlg = {
+        title: 'Replace the current game?',
+        lines: [`The file contains ${inc.character.name}, level ${inc.character.level}, game time ${R.formatClock(inc.clock)}.`, `This device currently has ${cur.character.name}, level ${cur.character.level}, game time ${R.formatClock(cur.clock)}. It will be replaced and cannot be restored unless you exported it first.`],
+        confirmLabel: 'Replace current game',
+        run: () => { clearDraft('import'); app.state = inc; app.report = { ok: true, title: 'Save imported', narrative: [], notes: [`Now playing ${inc.character.name}, level ${inc.character.level}.`], changes: [] }; app.reveal = '.report'; render(); persist(); }
+      };
+      render();
     } else if (kind === 'reset') {
-      if (fd.get('confirm') !== 'RESET') { app.resetError = 'Type RESET exactly to confirm.'; render(); return; }
+      if (fd.get('confirm') !== 'RESET') { app.resetError = 'Type RESET exactly to confirm. Nothing was deleted.'; app.reveal = '[data-msg]'; render(); return; }
       app.resetError = '';
-      app.chain = app.chain.then(() => deps.clear()).then(() => { app.state = null; app.report = null; app.draft = {}; render(); });
+      app.chain = app.chain.then(() => deps.clear()).then(() => { app.state = null; app.report = null; app.draft = {}; app.view = 'dashboard'; app.panel = null; app.reveal = '.setup-head h1'; render(); });
     }
   }
+
+  // Tracker form: show only the fields that apply to the chosen type (cadence for habits, target for goals).
+  function syncKindFields(form) {
+    const kind = form.querySelector('select[name="kind"]').value;
+    form.querySelectorAll('[data-kinds]').forEach((el) => { el.hidden = el.dataset.kinds !== kind; });
+  }
+  root.addEventListener('change', (e) => { if (e.target.matches && e.target.matches('form[data-form="goal"] select[name="kind"]')) syncKindFields(e.target.form); });
 
   root.addEventListener('click', onClick);
   root.addEventListener('submit', onSubmit);
   root.addEventListener('keydown', onKeydown);
+  // Escape closes an open Messages/Notifications panel even when focus is on plain page content.
+  root.ownerDocument.addEventListener('keydown', (e) => { if (e.key === 'Escape' && app.panel && !app.pending && !app.confirmDlg && !root.contains(e.target)) closePanel(true); });
 
   // Used by cloud sync only: swap in a save downloaded from the cloud and write it to this device.
   // It saves through saveLocalOnly so the write cannot start another upload.

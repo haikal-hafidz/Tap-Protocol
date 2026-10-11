@@ -7,6 +7,10 @@ export const MAX_ATTR = 10;
 export const MAX_SKILL = 10;
 export const QUEST_ID = 'menu';
 
+// Real-life Tracker rewards. A completion of a Tracker goal that the player linked to the RPG (with real-life rewards
+// enabled) pays this much, through the normal EXP and skill rules. dailyCap is the most rewarded completions per real day.
+export const TRACKER_REWARD = { exp: 6, skillExp: 4, dailyCap: 3 };
+
 export const ATTR_GROUPS = ['Physical', 'Mental', 'Social', 'Practical'];
 
 export const ATTRIBUTES = [

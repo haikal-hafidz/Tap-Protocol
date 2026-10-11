@@ -63,6 +63,8 @@ export async function boot(root, opts = {}) {
 
 if (!globalThis.__TAP_NO_AUTOBOOT__) {
   boot(document.getElementById('root')).catch((e) => {
-    document.getElementById('root').innerHTML = '<p class="error" style="padding:1rem">TAP Protocol could not start: ' + String(e.message).replace(/</g, '&lt;') + '</p>';
+    const msg = 'Details: ' + String((e && e.message) || e) + '. Your save has not been changed. Reload to try again.';
+    if (globalThis.__tapFatal) globalThis.__tapFatal(msg);
+    else document.getElementById('root').textContent = 'TAP Protocol could not start. ' + msg;
   });
 }

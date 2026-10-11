@@ -57,12 +57,12 @@ async function device() {
   return { ctx, page };
 }
 async function createPithe(page, url = app.url) { await page.goto(url); await page.waitForSelector('form[data-form="create"]'); await page.click('form[data-form="create"] button[type="submit"]'); await page.waitForSelector('.navbtn'); await until(() => readState(page), 8000, 'local save'); }
-async function openSettings(page) { await page.click('.navbtn[data-view="character"]'); await page.waitForSelector('#cloud-panel'); }
+async function openSettings(page) { await page.click('.navbtn[data-view="more"]'); await page.click('main [data-action="nav"][data-view="settings"]'); await page.waitForSelector('#cloud-panel'); }
 async function signIn(page, email, create = false) {
   await page.fill('form[data-cloud-form="signin"] input[name="email"]', email); await page.fill('form[data-cloud-form="signin"] input[name="password"]', 'password1');
   await page.click(create ? '[data-cloud="signup"]' : 'form[data-cloud-form="signin"] button[type="submit"]');
 }
-async function toggleRewards(page) { await page.click('.navbtn[data-view="character"]'); await page.click('[data-action="toggle-integration"]'); await until(async () => (await page.locator('#save-status').textContent()).includes('Saved'), 6000, 'local save'); }
+async function toggleRewards(page) { await openSettings(page); await page.click('[data-action="toggle-integration"]'); await until(async () => (await page.locator('#save-status').textContent()).includes('Saved'), 6000, 'local save'); }
 
 let A, B;
 try {
@@ -111,8 +111,8 @@ try {
   });
   await test('a change on the laptop reaches the phone when it is opened again; no echo back', async () => {
     await toggleRewards(A.page); await until(() => mock.row('me@x.test').revision === 2, 8000, 'push of change'); const w = mock.writes;
-    await B.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await until(async () => (await readState(B.page)).settings.integration === true, 8000, 'pull on phone');
-    await sleep(3500); eq(mock.writes, w, 'no write caused by the pull'); eq((await readState(B.page)).settings.integration, true);
+    await B.page.evaluate(() => document.dispatchEvent(new Event('visibilitychange'))); await until(async () => (await readState(B.page)).settings.integration === false, 8000, 'pull on phone');   // rewards start ON now, so the toggle turns them off
+    await sleep(3500); eq(mock.writes, w, 'no write caused by the pull'); eq((await readState(B.page)).settings.integration, false);
   });
   await test('typing in the journal is not wiped when sync status changes in the background (no full re-render)', async () => {
     await B.page.click('.navbtn[data-view="journal"]'); const ta = B.page.locator('textarea').first(); await ta.fill('half-written entry');
@@ -133,7 +133,7 @@ try {
     await A.page.goto(app.url); await A.page.waitForSelector('.navbtn'); await until(async () => /Synced at/.test(await (async () => { await openSettings(A.page); return statusText(A.page); })()), 15000, 'laptop synced');
     await B.page.goto(app.url); await B.page.waitForSelector('.navbtn'); await openSettings(B.page); await until(async () => /Synced at/.test(await statusText(B.page)), 15000, 'phone synced');
     await B.ctx.setOffline(true);                                                                       // phone changes while offline: a different field than the laptop edits
-    { const st = await readState(B.page); st.money = 4242; await B.page.fill('form[data-form="import"] textarea', JSON.stringify({ app: 'tap-protocol', state: st })); await B.page.click('form[data-form="import"] button[type="submit"]'); await until(async () => (await readState(B.page)).money === 4242, 6000, 'phone local edit'); await openSettings(B.page); }
+    { const st = await readState(B.page); st.money = 4242; await B.page.fill('form[data-form="import"] textarea', JSON.stringify({ app: 'tap-protocol', state: st })); await B.page.click('form[data-form="import"] button[type="submit"]'); await B.page.click('.modal [data-action="confirm"]'); await until(async () => (await readState(B.page)).money === 4242, 6000, 'phone local edit'); await openSettings(B.page); }
     const beforeToggle = (await readState(A.page)).settings.integration; await toggleRewards(A.page); await until(async () => mock.row('me@x.test').payload.settings.integration === !beforeToggle, 10000, 'laptop push');
     const cloudBefore = JSON.stringify(mock.row('me@x.test')); await B.ctx.setOffline(false);
     await B.page.waitForSelector('#cloud-modal', { timeout: 15000 }); eq(JSON.stringify(mock.row('me@x.test')), cloudBefore, 'cloud untouched');
@@ -162,7 +162,7 @@ try {
   await test('export and import still work and an import is synced like any other local change; RESET still deletes only the local save', async () => {
     await openSettings(A.page); const dl = A.page.waitForEvent('download'); await A.page.click('[data-action="export"]'); const file = JSON.parse(fs.readFileSync(await (await dl).path(), 'utf8'));
     ok(file.app === 'tap-protocol' && file.state.character); file.state.money = 777;
-    await A.page.fill('form[data-form="import"] textarea', JSON.stringify(file)); await A.page.click('form[data-form="import"] button[type="submit"]');
+    await A.page.fill('form[data-form="import"] textarea', JSON.stringify(file)); await A.page.click('form[data-form="import"] button[type="submit"]'); await A.page.click('.modal [data-action="confirm"]');
     await until(() => mock.row('me@x.test').payload.money === 777, 10000, 'imported save synced');
     await openSettings(A.page); await A.page.fill('form[data-form="reset"] input[name="confirm"]', 'RESET'); await A.page.click('form[data-form="reset"] button[type="submit"]');
     await A.page.waitForSelector('form[data-form="create"]'); eq(await readState(A.page), null); eq(mock.row('me@x.test').payload.money, 777, 'cloud copy survives a local RESET');

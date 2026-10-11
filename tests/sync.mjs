@@ -226,6 +226,58 @@ await test('rewards are never paid twice: sync only swaps whole saves and never 
   A.edit((s) => { s.money += 25; s.stats.collapses = s.stats.collapses; }); await A.flush(); await B.sync.sync(); await B.sync.sync(); await A.sync.sync(); await B.flush();
   eq(A.local.money, B.local.money); eq(JSON.stringify(canonical(A.local)), JSON.stringify(canonical(mock.row('a@x.test').payload)));
 });
+// ---------------------------------------------------------------- real-life Tracker rewards through sync
+// The stand-in server and the engine only move whole saves; these tests run the REAL rules (recordCompletion) on the devices and check
+// that the reward and its stored claim travel together, so nothing is paid twice or lost. Same limits as the rest of this file:
+// no real Supabase project was used.
+const taskState = () => { const st = newState(); st.settings.integration = true; R.addGoal(st, { name: 'Study Excel', kind: 'task', rpgLink: true, linkedSkill: 'research' }, '2026-10-11'); return st; };
+const complete = (d) => d.edit((s) => { const r = R.recordCompletion(s, s.tracker.goals[0].id, '2026-10-11'); ok(r.ok, r.error); });
+const claimOf = (st) => st.tracker.goals[0].completions.map((c) => c.reward && c.reward.status).join(',');
+await test('tracker reward: completing on A reaches B once; syncing again, in any order, never pays again', async () => {
+  const mock = createMock(); const A = await signedIn(mock, 'a@x.test', { state: taskState() }); await A.sync.sync();
+  const B = await signedIn(mock, 'a@x.test', { state: null }); await B.sync.restore();
+  complete(A); await A.flush(); eq(A.local.character.exp, 6);
+  await B.sync.sync(); eq(B.local.character.exp, 6); eq(claimOf(B.local), 'granted');
+  const w = mock.writes;
+  for (let i = 0; i < 3; i++) { await B.sync.sync(); await A.sync.sync(); await A.flush(); await B.flush(); }
+  eq(A.local.character.exp, 6); eq(B.local.character.exp, 6); eq(mock.row('a@x.test').payload.character.exp, 6); eq(mock.writes, w, 'syncing wrote again');
+  const Bgoal = B.local.tracker.goals[0].id; ok(!R.recordCompletion(B.local, Bgoal, '2026-10-11').ok, 'B accepted the completion A already recorded'); eq(B.local.character.exp, 6);
+});
+await test('tracker reward: completed offline, queued, sent once after reconnect; the other device receives exactly one reward', async () => {
+  const mock = createMock(); let online = true; const A = await signedIn(mock, 'a@x.test', { state: taskState(), online: () => online }); await A.sync.sync();
+  const B = await signedIn(mock, 'a@x.test', { state: null }); await B.sync.restore(); const w = mock.writes;
+  online = false; mock.offline = true; complete(A); await A.flush(); eq(A.phase(), 'offline'); eq(mock.writes, w); eq(A.local.character.exp, 6, 'reward applies locally while offline');
+  ok(!R.recordCompletion(A.local, A.local.tracker.goals[0].id, '2026-10-11').ok, 'offline retry accepted');
+  online = true; mock.offline = false; await A.sync.sync(); await A.flush(); eq(A.phase(), 'idle'); eq(mock.writes - w, 1, 'exactly one write'); eq(mock.row('a@x.test').payload.character.exp, 6);
+  await B.sync.sync(); eq(B.local.character.exp, 6); eq(claimOf(B.local), 'granted');
+});
+await test('tracker reward: a failed upload and its retries keep one reward and one claim', async () => {
+  const mock = createMock(); const A = await signedIn(mock, 'a@x.test', { state: taskState() }); await A.sync.sync();
+  complete(A); mock.failNext = [503, 500]; await A.sync.sync(); eq(A.phase(), 'error'); await A.sync.sync(); eq(A.phase(), 'error');
+  eq(A.local.character.exp, 6); eq(claimOf(A.local), 'granted'); await A.sync.sync(); eq(A.phase(), 'idle');
+  eq(mock.row('a@x.test').payload.character.exp, 6); eq(claimOf(mock.row('a@x.test').payload), 'granted'); eq(A.local.tracker.goals[0].completions.length, 1);
+});
+await test('tracker reward: BOTH devices complete the same task offline: conflict, nothing written, and whichever save the player keeps holds exactly one reward', async () => {
+  for (const keep of ['cloud', 'local']) {
+    const mock = createMock(); const A = await signedIn(mock, 'a@x.test', { state: taskState() }); await A.sync.sync();
+    const B = await signedIn(mock, 'a@x.test', { state: null }); await B.sync.restore();
+    complete(A); await A.flush(); complete(B); await B.flush(); await B.sync.sync();
+    eq(B.phase(), 'conflict'); eq(A.local.character.exp, 6); eq(B.local.character.exp, 6, 'each device rewarded itself once');
+    const w = mock.writes; await B.sync.resolve(keep); eq(B.phase(), 'idle'); await A.sync.sync(); await A.flush(); await B.sync.sync();
+    eq(A.local.character.exp, 6, keep + ': A'); eq(B.local.character.exp, 6, keep + ': B'); eq(mock.row('a@x.test').payload.character.exp, 6, keep + ': cloud');
+    eq(claimOf(B.local), 'granted'); eq(B.local.tracker.goals[0].completions.length, 1); ok(mock.writes - w <= 1);
+  }
+});
+await test('tracker reward: capped completions sync as capped; the other device neither pays them nor loses them', async () => {
+  const st = newState(); st.settings.integration = true; for (let i = 1; i <= 4; i++) R.addGoal(st, { name: 'T' + i, kind: 'task', rpgLink: true }, '2026-10-11');
+  const mock = createMock(); const A = await signedIn(mock, 'a@x.test', { state: st }); await A.sync.sync();
+  const B = await signedIn(mock, 'a@x.test', { state: null }); await B.sync.restore();
+  A.edit((s) => { for (const g of s.tracker.goals) ok(R.recordCompletion(s, g.id, '2026-10-11').ok); }); await A.flush();
+  eq(A.local.character.exp, 18); await B.sync.sync();
+  eq(B.local.character.exp, 18); eq(B.local.tracker.goals.map((g) => g.completions[0].reward.status).join(','), 'granted,granted,granted,capped');
+  for (let i = 0; i < 2; i++) { await B.sync.sync(); await A.sync.sync(); } eq(B.local.character.exp, 18); eq(A.local.character.exp, 18);
+  ok(!R.recordCompletion(B.local, B.local.tracker.goals[3].id, '2026-10-11').ok);
+});
 // ---------------------------------------------------------------- added in the audit (revision 0.2.1)
 await test('older cloud save (less game time) is NEVER pulled silently, even if this device has no unsynced change', async () => {
   const mock = createMock(); const A = await signedIn(mock, 'a@x.test', { state: newState() }); A.local.clock = 5000; await A.sync.sync();

@@ -1,3 +1,9 @@
+UX Session 2 Part 2, 2026-10-11, Node v22.22.2
+
+
+> tap-protocol@0.2.2 test:browser
+> node tests/browser.mjs
+
 Browser: Chromium 141.0.7390.37 (Playwright, headless)
 
 == Manifest and installability ==
@@ -25,14 +31,25 @@ PASS  export downloads a valid save; invalid imports are rejected without changi
 PASS  reset requires the exact word RESET: other input is refused and the save survives; RESET deletes it
 
 == Responsive layout ==
-PASS  no horizontal overflow on the setup screen and all 7 views at 300, 320, 360, 390, 600, 768, 1280 px
+PASS  no horizontal overflow on the setup screen and all 9 views (incl. More) at 300, 320, 360, 390, 600, 768, 1280 px
 PASS  navigation labels are all present, in order, readable, spaced and touchable at 300, 320, 360, 390, 600, 768, 1280 px
 
 == Warning dialog and accessibility ==
 PASS  warning dialog: focus moves in (onto Cancel), Tab is trapped, Escape cancels, focus returns to the opener, background is inert, labelled
-PASS  automated accessibility scan (axe-core, WCAG 2.0/2.1 A and AA) on the setup screen, all 7 views and the warning dialog at 390px and 1280px
+PASS  automated accessibility scan (axe-core, WCAG 2.0/2.1 A and AA) on the setup screen, all 9 views (incl. More) and the warning dialog at 390px and 1280px
+PASS  startup failure: a game file that throws shows the error screen with Reload (never an endless loading screen); Home categories fit at 300px
+PASS  UX session 2 interactions @390px: results land in view and take focus, stale results clear on navigation, typed drafts survive panels, tracker fields match the type, focus returns after a re-render
 
 == Quest failure path (played through the real UI) ==
 PASS  QUEST deadline miss: accept from Dani, let 72 game hours pass, verify outcome, consequences, journal, persistence and reload
 
-19 passed, 0 failed
+== Real-life Tracker rewards Pithe (real browser, real IndexedDB) ==
+PASS  TRACKER REWARD: complete a real-life task in Chromium: EXP rises once; double click, reload and navigation never pay again
+
+== UX Session 2, Part 2 ==
+PASS  ACCESSIBILITY (populated save): axe-core WCAG 2.0/2.1/2.2 A and AA at 300, 390 and 1280px on Home with a blocked action card, Tracker with history, Inventory, World with the talk panel, the header panels and the import confirmation
+PASS  LAYOUT @300px and @390px (populated save): no element sticks out of its panel, card or list (skills, travel buttons, talk choices)
+PASS  SAVE FAILURE: when the device refuses the write, a visible alert says so and the game stays playable; it clears when saving works again
+PASS  INTERACTION details: distinct button names, Dismiss keeps keyboard focus, Export confirms, empty Import is explained, streak wording, heading order
+
+26 passed, 0 failed

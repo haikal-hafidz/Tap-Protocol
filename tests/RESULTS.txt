@@ -1,3 +1,9 @@
+UX Session 2 Part 2, 2026-10-11, Node v22.22.2
+
+
+> tap-protocol@0.2.2 test
+> node tests/run.mjs
+
 
 == Rules ==
 PASS  character creation validates input
@@ -16,6 +22,17 @@ PASS  QUEST (success path): full flow with real state changes
 PASS  QUEST (failure path): missing the deadline fails the quest, world continues
 PASS  journal: manual entries are dated; in-world reward only once per day; real entries never reward
 PASS  tracker: creating is not completing; real-life stays separate unless integration is on
+PASS  tracker->PITHE: completing a linked one-off task changes EXP and skill through the real rules, and stores the claim
+PASS  tracker->PITHE: the reward can carry a skill level-up through to an attribute (existing training rules)
+PASS  tracker->PITHE: no reward without a completion, with rewards off, or when not linked
+PASS  tracker->PITHE: turning rewards on later never pays completions that were already recorded
+PASS  tracker->PITHE: repeated attempts (double click, many tries, finished goal, weekly habit) never pay twice
+PASS  tracker->PITHE: the daily cap comes from the stored claims, so moving the date back and forth cannot reset it
+PASS  tracker->PITHE: native quests keep their own objectives and rewards (a real-life task never completes or alters them)
+PASS  tracker->PITHE: the reward amounts are configuration (data.js), not numbers buried in the rule
+PASS  rewards default: ON for a fresh save, an explicit OFF at creation is kept, and a stored preference survives load
+PASS  rewards default: a new task is paid with no setup; a legacy disabled save stays unpaid until the player enables it, and never retroactively
+PASS  cap: counts GRANTED rewards; completions past the cap are still recorded, marked capped, never queued, never re-evaluated
 PASS  skill level-ups feed attribute training; attributes cap at 10
 PASS  REGRESSION: every route between every pair of locations has a real travel time and cost (cafe routes were NaN)
 PASS  REGRESSION: loading a save damaged by the cafe bug (Energy null) repairs it instead of showing exhaustion
@@ -24,15 +41,20 @@ PASS  REGRESSION: loading a save damaged by the cafe bug (Energy null) repairs i
 PASS  save then load round-trips the full state
 PASS  corrupted main save falls back to the previous backup
 PASS  import rejects invalid saves and accepts exports
+PASS  tracker->PITHE: reward and claim survive save, close and reopen; reopening never pays again
+PASS  tracker->PITHE (legacy saves): an old save loads with all progress, its old completions are never paid retroactively, new ones pay once
 
 == UI flow (jsdom, real ui.js and main.js) ==
 PASS  first launch shows character creation; invalid input shows errors
 PASS  create Pithe, enter the world, and every view renders
+PASS  UX session 1: Home categories (People, Family, Personal) work; Personal shows Tracker goals; Messages and Notifications panels open, close and are honest
+PASS  UX session 1: PITHE only, five-item bottom nav in order, header holds no primary navigation, navigation never touches the save
 PASS  perform an activity from the UI and see the actual results
 PASS  drive the whole sample quest through the UI
 PASS  hardcore warning modal appears before a costly action and can be cancelled
 PASS  journal entry and tracker goal through the UI
 PASS  REFRESH: reload the app and verify everything persisted
+PASS  tracker->PITHE (real UI): enable rewards, add a task, complete it: EXP changes; repeats and a refresh never pay again
 PASS  CLOUD APPLY GUARD (real ui.js): a cloud save is not applied if the player acted meanwhile; a clean apply works and is saved locally
 
 == PWA files (static) ==
@@ -45,4 +67,4 @@ PASS  config.js: only a Supabase project URL and a Publishable key (never a Secr
 == Emoji scan ==
 PASS  no emoji characters anywhere in the project (text files, file names, and PNG metadata)
 
-36 passed, 0 failed
+52 passed, 0 failed

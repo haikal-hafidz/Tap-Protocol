@@ -9,7 +9,7 @@ Supabase may have renamed a menu: look for the item with the same words.
 
 ## Before you start (2 minutes, do not skip)
 
-1. In the game, open **Character > Settings and save data > Export save file** and keep the downloaded file somewhere safe.
+1. In the game, open **More > Settings and save data > Export save file** and keep the downloaded file somewhere safe.
 2. Have your Supabase **Project URL** and **Publishable key** ready (the text file you saved).
    - Project URL looks like `https://abcdxyz.supabase.co`
    - Publishable key starts with `sb_publishable_`
@@ -63,7 +63,7 @@ On a device that already had the game you will see "A new version is ready": pre
 ## 6. First use
 
 **Laptop (the device that has your current save):**
-1. Character > scroll to **Cloud sync**. Type your email and a password (at least 8 characters). Press **Create account**.
+1. More > Settings and save data > scroll to **Cloud sync**. Type your email and a password (at least 8 characters). Press **Create account**.
 2. Open the email from Supabase and click the link. It brings you back to the game, signed in.
 3. The panel shows **Synced at ...**. Your save is now in the cloud.
 
@@ -108,10 +108,10 @@ If you played on both devices while they could not reach each other, the game sh
 
 ## What was tested, and what was not
 
-Ran and passed (revision 0.2.2, Node 22, Chromium 141). All of these use a STAND-IN for Supabase, never your real project:
-- `npm test`: 36 tests (rules, local storage, the real game UI in jsdom, PWA files, the cloud-apply guard).
-- `npm run test:sync`: 38 sync-engine tests against a stand-in server: decisions, conflicts, two devices pushing at once, offline queue, retries, expired sessions, sign-out, different account, hostile data, older-cloud rule, races, refused Secret key.
+Ran and passed (revision 0.2.2, UX Session 2 Part 2, Node 22, Chromium 141). All of these use a STAND-IN for Supabase, never your real project:
+- `npm test`: 52 tests (rules, local storage, the real game UI in jsdom, PWA files, the cloud-apply guard).
+- `npm run test:sync`: 43 sync-engine tests against a stand-in server: decisions, conflicts, two devices pushing at once, offline queue, retries, expired sessions, sign-out, different account, hostile data, older-cloud rule, races, refused Secret key.
 - `npm run test:rls`: 13 database tests. They run the real `supabase/schema.sql` in a local simulated PostgreSQL (PGlite) with two users. This proves the SQL logic (own rows only, revision set by the database, no delete, no anonymous access). It does NOT prove that your Supabase project has the table, that its Data API exposes it, or that Supabase's own JWT checks behave the same.
-- `npm run test:browser` (19) and `npm run test:sync-browser` (13): real Chromium. The second one uses the stand-in server.
+- `npm run test:browser` (26) and `npm run test:sync-browser` (13): real Chromium. The second one uses the stand-in server.
 
 NOT verified by anyone yet (this is what step 7 is for): the SQL really run in your project, real sign-up and email delivery, the redirect URLs, real token refresh, and two real devices (laptop and phone).

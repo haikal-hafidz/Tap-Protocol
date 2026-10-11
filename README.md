@@ -64,9 +64,9 @@ Sign in under Character, Cloud sync to keep one save on all your devices. It is 
 
 Without cloud sync (see above), saves are local to each browser. To move progress by hand:
 
-1. On the old device: Character, Settings, "Export save file". This downloads `tap-protocol-save-YYYY-MM-DD.json`.
+1. On the old device: More, Settings and save data, "Export save file". This downloads `tap-protocol-save-YYYY-MM-DD.json`.
 2. Move that file to the other device (email, cloud drive, USB, whatever you trust).
-3. On the new device: open the game, create any character if prompted, then Character, Settings, "Import a save". Paste the entire contents of the file and press "Import save". This replaces the game on that device.
+3. On the new device: open the game, create any character if prompted, then More, Settings and save data, "Import a save". Paste the entire contents of the file and press "Import save". This replaces the game on that device.
 
 Imports are validated. A file that is not a TAP Protocol save is rejected and nothing changes. Deleting a save requires typing RESET exactly.
 
@@ -97,8 +97,8 @@ Nothing happens when opening index.html by double-click: expected, see "Run it".
 The tests are the only part that needs npm packages (dev only: jsdom, fake-indexeddb, playwright, axe-core). The game itself has zero runtime dependencies.
 
     npm install
-    npm test                 # 34 fast tests (rules, storage, jsdom UI flow, PWA files, emoji scan)
-    npm run test:browser     # 19 real-browser tests (Chromium via Playwright), including offline play
+    npm test                 # 52 fast tests (rules, storage, jsdom UI flow, PWA files, emoji scan)
+    npm run test:browser     # 26 real-browser tests (Chromium via Playwright): offline play, layout at 300px, axe-core scans, keyboard and save-failure checks
     npm run test:all         # everything: fast, browser, sync (stand-in server), database rules, sync in browser
 
 The browser tests need a Chromium that Playwright can find. If Playwright has none, run `npx playwright install chromium` once, or set `CHROMIUM_PATH=/path/to/chrome`. Set `TAP_ONLY=offline` (any regular expression) to run only matching tests, and `TAP_SHOTS=/some/dir` to save screenshots of the layout checks.
@@ -107,14 +107,14 @@ The browser tests need a Chromium that Playwright can find. If Playwright has no
 
 1. Create Pithe: pick a background and a trait. Difficulty is Hardcore.
 2. You start in the Rented Room at 07:00 on Monday 4 March 2030.
-3. Use the Dashboard to act. Every action shows its duration and expected changes first. Costly actions show a warning dialog (keyboard: Tab moves between its buttons, Escape cancels).
+3. Use Home to act. Every action shows its duration and expected changes first. Costly actions show a warning dialog (keyboard: Tab moves between its buttons, Escape cancels).
 4. Keep Energy, Satiety and Health up. Eat, rest and sleep.
 5. For the quest, talk to Dani at the Corner Cafe (open from 10:00) and ask if she needs help.
-6. Use Journal for dated entries and Tracker for real-life habits and goals. The tracker does not affect the game unless you enable it in Character, Settings, and link a goal.
+6. Use Journal for dated entries and Tracker (More, Tracker) for real-life habits, goals and one-off tasks. Real-life rewards are on by default for a new character (untick the box on the setup screen, or use the Disable button at the top of Tracker or in More, Settings and save data, to turn them off); saves made earlier keep the choice they already had. New items are linked to the RPG by default while rewards are on (untick "Link to RPG rewards" per item). Recording a completion of a linked item gives Pithe 6 EXP, plus 4 skill EXP in the skill you chose (skill level-ups feed attributes through the normal rules). Each completion is judged once, at the moment you record it, and the result is stored with the completion; at most 3 completions per real day are paid. Completions recorded before rewards existed, or while rewards were off, are never paid later. Amounts are in `TRACKER_REWARD` in `js/data.js`. Real-life tasks never complete native quests.
 
 ## Save data
 
-Saves live in this browser's IndexedDB (with a checksum and an automatic backup of the previous save). Clearing site data erases them. Use Character, Settings, Export save file to keep a copy. Time in the game only advances when you act.
+Saves live in this browser's IndexedDB (with a checksum and an automatic backup of the previous save). Clearing site data erases them. Use More, Settings and save data, Export save file to keep a copy. Time in the game only advances when you act.
 
 ## Manual checklist
 
@@ -124,6 +124,6 @@ Saves live in this browser's IndexedDB (with a checksum and an automatic backup 
 4. Complete The Missing Menu (Teo: regulars; buy a notebook; Dani: ask, accept; write 3 drafts; deliver).
 5. Add a journal entry and a tracker goal, then record the goal once.
 6. Close the browser fully, reopen the page: everything is still there.
-7. Character, Settings: export a save file.
+7. More, Settings and save data: export a save file.
 8. Offline: with the game installed or cached, switch to airplane mode, launch it, and confirm the save and every section work.
-9. On a phone: the bottom navigation shows all seven labels in two rows, none cut off.
+9. On a phone: the bottom navigation shows its five labels (Home, World, Journal, Progress, More) in one row, none cut off. Tracker, Quests, Inventory and Settings and save data are under More. The same bottom bar is used on desktop; there is no sidebar. Progress shows attributes and skills only.
