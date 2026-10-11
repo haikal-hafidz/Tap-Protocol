@@ -68,7 +68,6 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .navbtn:hover { color: var(--text); background: var(--cream); }
 .navbtn.on { color: var(--forest); font-weight: 600; border-top-color: var(--forest); background: var(--cream); }
 .navbtn:focus-visible { outline-offset: -4px; }
-@media (min-width: 40rem) { .tab { flex: 0 0 auto; padding: 0.35rem 1.25rem; } }
 @media (min-width: 40rem) { .navbtn { font-size: 0.92rem; } }
 .viewtitle { margin-bottom: 0.7rem; }
 
@@ -227,3 +226,149 @@ main:focus { outline: none; }
 .notice, .error { scroll-margin-top: 1rem; }
 .report, .errors { scroll-margin-top: 0.5rem; }
 .report:focus, .errors:focus, [data-msg]:focus { outline: 2px solid var(--forest); outline-offset: 2px; }
+
+
+/* ======================================================================================================================
+   UX Session 4: approved mockup applied to the real app (visual only; same palette, same markup hooks, same behaviour).
+   Reference: the approved HTML mockup (cream page, forest hero card, sans headings, eyebrow + large title, icon tiles,
+   pill tabs, icon bottom bar). Layout and look only; every value shown comes from the save.
+   ====================================================================================================================== */
+:root {
+  --r-sm: 10px; --r-md: 15px; --r-lg: 18px;
+  --olive-text: #5C6B40;
+  --tag-bg: #E9EBDD;
+  --hero-soft: #D8DFD4;
+  --hero-tile: #435747;
+  --hero-track: #647361;
+  --hero-exp: #D8C99E;
+}
+/* headings: bold sans like the mockup. Serif stays for long reading text (.story, journal entries). */
+h1, h2, h3 { font-family: var(--sans); font-weight: 700; letter-spacing: -0.01em; }
+h1 { font-size: clamp(1.6rem, 1.3rem + 1vw, 1.95rem); font-weight: 800; letter-spacing: -0.03em; margin: 0.15rem 0 0; }
+h2 { font-size: 1.06rem; margin: 0 0 0.7rem; }
+h3 { font-size: 0.92rem; color: var(--forest); margin: 0 0 0.25rem; }
+.report-title { font-size: 1rem; color: var(--forest); }
+.attr-group h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--brass); }
+legend, .boot-title { font-family: var(--sans); font-weight: 700; }
+.main { max-width: 68.75rem; padding: 1rem clamp(0.8rem, 3vw, 1.4rem) 6.5rem; }
+
+/* header: brand + tagline on the left, outlined icon buttons on the right, a rule beneath */
+.appbar { padding: 0.35rem 0 0.9rem; margin-bottom: 0.9rem; border-bottom: 1px solid var(--divider); gap: 0.5rem 0.75rem; }
+.apptitle { font-family: var(--sans); font-size: 1.3rem; font-weight: 800; letter-spacing: -0.04em; }
+.tagline { margin: 0; font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); max-width: none; }
+.appbar-tools { gap: 0.5rem; }
+.toolbtn { border-radius: 12px; padding: 0 0.8rem; min-height: 2.75rem; font-size: 0.9rem; }
+.toolbtn .ico { width: 18px; height: 18px; flex: none; }
+.appbar-sub { gap: 0.3rem 0.8rem; }
+.gametime { font-size: 0.8rem; }
+
+/* page heading: eyebrow, big title, one-line description */
+.page-heading { margin: 0.2rem 0 1.1rem; }
+.eyebrow { text-transform: uppercase; letter-spacing: 0.12em; font-size: 0.75rem; font-weight: 700; color: var(--muted); }
+.lede { margin: 0.2rem 0 0; color: var(--muted); font-size: 0.92rem; }
+.viewtitle { margin-bottom: 0; }
+
+/* the dark status card (Home status, Progress overview) */
+.hero { background: var(--forest); color: var(--white); border: 0; border-radius: var(--r-lg); padding: 1.4rem; margin-bottom: 0.9rem; }
+.hero p, .hero small { color: var(--hero-soft); max-width: none; }
+.hero .eyebrow { color: var(--hero-soft); }
+.hero h2 { color: var(--white); font-size: 1.55rem; font-weight: 800; letter-spacing: -0.03em; margin: 0.25rem 0; }
+.hero-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.75rem; }
+.hero .who { color: var(--white); font: inherit; letter-spacing: inherit; text-decoration-color: rgba(255, 254, 252, 0.4); padding: 0; }
+.hero .who:hover { text-decoration-color: var(--white); }
+.hero :focus-visible { outline-color: var(--white); }
+.level { display: inline-block; flex: none; border: 1px solid #82917D; border-radius: 20px; padding: 0.3rem 0.7rem; font-size: 0.78rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--white); }
+.hero .meter { margin: 0.8rem 0 0.35rem; }
+.hero .meter .bar, .hero .stat .bar { background: var(--hero-track); height: 7px; margin: 0; }
+.hero .meter .bar.exp > span { background: var(--hero-exp); }
+.hero .small { font-size: 0.8rem; color: var(--hero-soft); }
+.hero .appearance { margin: 0.5rem 0 0; }
+.stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.55rem; margin: 1.1rem 0 0; }
+.stat { background: var(--hero-tile); border-radius: 12px; padding: 0.65rem 0.75rem; min-width: 0; }
+.stat span, .stat dt { display: block; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--hero-soft); }
+.stat b, .stat dd { display: block; margin: 0.1rem 0 0.35rem; font-size: 1.2rem; font-weight: 700; color: var(--white); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat dd { font-size: 1rem; margin-bottom: 0; }
+.stat > b:last-child { margin-bottom: 0; }
+.hero .stat .bar.health > span { background: #E3A08F; }
+.hero .stat .bar.energy > span { background: #C5D3A0; }
+.hero .stat .bar.satiety > span { background: #E3CE96; }
+.hero .tags { margin: 0.9rem 0 0; }
+.hero .tags .tag { background: var(--tag-bg); color: var(--warn); border: 0; }
+
+/* Home categories: the mockup's shortcut cards (icon, title, one line). The line comes from data-sub so button text stays the label. */
+.tabs.shortcuts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.65rem; overflow: visible; margin-bottom: 0.9rem; }
+.shortcut { display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem; min-height: 4.6rem; padding: 0.9rem 0.8rem; border-radius: 13px; text-align: left; font-weight: 700; color: var(--forest); }
+.shortcut .ico { width: 22px; height: 22px; margin-bottom: 0.35rem; }
+.shortcut::after { content: attr(data-sub); font-size: 0.8rem; font-weight: 400; line-height: 1.35; color: var(--muted); }
+.shortcut:hover { border-color: var(--forest); }
+.shortcut.on { background: var(--forest); border-color: var(--forest); color: var(--white); }
+.shortcut.on::after { color: var(--hero-soft); }
+
+/* section headings with an action, list cards with an icon tile, text buttons */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.5rem; }
+.section-head h2 { margin: 0; }
+.text-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem; min-height: 2.75rem; min-width: 2.75rem; padding: 0.25rem 0.4rem; background: none; border: 0; border-radius: var(--r-sm); color: var(--olive-text); font-weight: 700; cursor: pointer; }
+.text-button:hover { color: var(--forest); background: var(--cream); }
+.text-button .ico { width: 16px; height: 16px; }
+.list-card { display: flex; align-items: center; gap: 0.8rem; padding: 0.8rem 0; border-top: 1px solid var(--divider); }
+.list-card:first-of-type { border-top: 0; }
+.section-head + .list-card { border-top: 1px solid var(--divider); }
+.list-card .text { flex: 1; min-width: 0; }
+.list-card .text p { margin: 0; font-size: 0.82rem; color: var(--muted); }
+.list-card h3 { margin: 0 0 0.1rem; }
+.list-icon { display: grid; place-items: center; width: 2.6rem; height: 2.6rem; flex: none; border-radius: 12px; background: var(--cream); color: var(--forest); }
+.panel h2 + .list-card { border-top: 0; }
+
+/* cards */
+.panel, .window, .report, .popover, .statusbar { border-radius: var(--r-md); }
+.panel, .window { padding: 1.1rem 1.15rem; margin-bottom: 0; }
+.window { border-top: 1px solid var(--edge); }
+.hero.window { border: 0; }
+.cols { gap: 0.9rem; margin-bottom: 0.9rem; }
+.cols > .panel { margin-bottom: 0; }
+main > .panel, main > .window, main > .report { margin-bottom: 0.9rem; }
+.statusbar:not(.hero) { border-top: 1px solid var(--edge); padding: 0.55rem 0.9rem 0.7rem; margin-bottom: 0.9rem; }
+.hero.statusbar { padding: 1.4rem; }
+.goal { padding: 0.75rem 0; }
+.goal:first-child { padding-top: 0.25rem; }
+
+/* tags: soft pills */
+.tag { background: var(--tag-bg); border: 0; border-radius: 20px; padding: 0.1rem 0.6rem; color: var(--forest); font-size: 0.75rem; letter-spacing: 0.02em; white-space: nowrap; }
+.tags .tag { background: #F6EBD0; color: var(--warn); }
+
+/* Journal sections: rounded pill tabs */
+.tabs.pill-row { gap: 0.5rem; margin: 0.2rem 0 1rem; }
+.pill-row .tab { flex: 0 0 auto; padding: 0.4rem 1rem; border-radius: 22px; min-height: 2.5rem; }
+
+/* bottom navigation: icon over label, active item is a cream pill */
+.nav { padding: 0.4rem 0.5rem max(0.4rem, env(safe-area-inset-bottom)); }
+.navlist { max-width: 40.5rem; gap: 0.25rem; }
+.navbtn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.15rem; border-top: 0; border-radius: 11px; padding: 0.4rem 0.1rem; min-height: 3.2rem; font-size: 0.78rem; }
+.navbtn .ico { width: 20px; height: 20px; }
+.navbtn.on { background: var(--cream); font-weight: 800; border-top: 0; }
+.navbtn:focus-visible { outline-offset: -2px; }
+
+/* phones */
+@media (max-width: 560px) {
+  .main { padding-top: 0.75rem; }
+  .apptitle { font-size: 1.1rem; }
+  .tagline { font-size: 0.72rem; letter-spacing: 0.04em; }
+  .appbar-tools { gap: 0.35rem; }
+  .toolbtn { flex-direction: column; justify-content: center; gap: 0.1rem; padding: 0.25rem 0.55rem; font-size: 0.75rem; min-height: 3rem; border-radius: 11px; }
+  .toolbtn .tl { line-height: 1.1; }
+  .toolbtn .badge { position: absolute; transform: translate(0.9rem, -0.9rem); }
+  .toolbtn { position: relative; }
+  .hero, .hero.statusbar { padding: 1.1rem; border-radius: 15px; }
+  .hero h2 { font-size: 1.35rem; }
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.45rem; }
+  .shortcut { padding: 0.7rem 0.6rem; gap: 0.1rem; font-size: 0.85rem; }
+  .shortcut::after { font-size: 0.75rem; }
+  .panel, .window { padding: 0.95rem; }
+  .cols { gap: 0.65rem; margin-bottom: 0.65rem; }
+}
+@media (max-width: 22rem) {
+  .navbtn { font-size: 0.76rem; padding-inline: 0; }
+  .appbar-id { flex-basis: 100%; }
+  .shortcut::after { font-size: 0.75rem; }
+}
+.statusbar:not(.hero) .who { font-family: var(--sans); font-weight: 700; font-size: 1.02rem; }

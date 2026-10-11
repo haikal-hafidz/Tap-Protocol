@@ -1,6 +1,25 @@
 # PROJECT_STATUS - TAP Protocol Phase 1
 
-## UX Session 3: lightweight visual polish (current)
+## UX Session 4: approved mockup applied to the real app (current)
+Scope: look and structure only. Changed `css/style.css`, `js/ui.js` (markup and copy of headings, header, status card, navigation rows; no logic) and `sw.js` (re-stamped). No change to `rules.js`, `data.js`, `storage.js`, `sync.js`, `cloud.js`, `cloud-ui.js`, `main.js`, the save schema, any rule, reward, Tracker behaviour or the palette. The mockup was used as a visual reference only; none of its sample numbers or sample tasks were copied.
+
+Gaps found by comparing the Session 3 build with the mockup (screenshots of both at 1280 and 390px, populated app) and fixed:
+- Header: no tagline, no rule, text-only tool buttons. Now brand + tagline, outlined icon buttons (Messages, Notifications with the real badge), rule below. Game time and save status kept.
+- Page titles: serif, no context. Now eyebrow ("Pithe / Discover"), large bold sans title, one-line description. Title text unchanged (tests rely on it).
+- Home status: thin white strip. Now the dark "Player status" card with Level pill, location, EXP meter and Health / Energy / Satiety / Money tiles, all from the save. Compact status strip stays on every other page.
+- Home categories: plain tabs. Now shortcut cards (icon, title, one line). Same buttons, same `aria-pressed`; the line comes from `data-sub` so the button text is still just the label.
+- Home Personal: added the mockup's two-column "Tracker goals" (with View all) + "Quick access" (Tracker, Quests, Inventory, real navigation). Everything that was there (goals, quick record, rewards line, "Open the full Tracker", quest, suggestions, travel, actions, recent events) is kept.
+- More: rows of buttons. Now list cards with icon tile, description and arrow (Daily life: Tracker, Quests, Inventory; Settings: Settings and save data). Same destinations.
+- Progress: character card is now the dark overview card (level, EXP meter, background, trait, EXP, collapses). Attributes, skills and progression unchanged.
+- Journal sections: rounded pill tabs. Same two real sections (the mockup's "Life log / RPG events" were not added: they do not exist in the game).
+- Bottom bar: inline SVG icon over label, active item is a cream pill. Same five items and order.
+- Cards: radius 15 (hero 18), bold sans card headings, soft pill tags, text buttons. Serif kept for story and journal text.
+- Icons are inline SVG (no emoji, no icon font, no network); the emoji scan test still passes.
+Deliberately not copied from the mockup: "Welcome back", "Day 01", sample missions with checkboxes, STR/INT/VIT/AGI sample tiles, "Alerts" label, World sub-tabs, "Life log / RPG events", placeholder dashes, footer text.
+
+Verification (Node v22.22.0, Chromium via Playwright 1.56.0, dependencies installed this time): `npm test` 52/52, `test:sync` 43/43, `test:rls` 13/13, `test:sync-browser` 13/13, `test:browser` 26/26 (the two axe-core tests now run and pass; they could not run in Session 3). Layout script: 11 screens (3 Home tabs, World, Journal, Progress, More, Tracker, Quests, Inventory, Settings) plus the notifications panel at 300, 390, 768 and 1280px: no horizontal overflow, nothing outside its card, no control under 35px. Screenshots were looked at for Home (1280, 390, 300), Progress (1280), More (390), Journal (390). Other screens were verified by script. The result is close to the mockup in structure, colour and component style, not pixel-identical (no original screenshot was available, and the sandbox uses fallback fonts). Not run against a real Supabase project; Firefox, Safari and real devices not tested.
+
+## UX Session 3: lightweight visual polish
 Scope: visual refinement only. Changed `css/style.css` and re-stamped `sw.js`. No change to any `js/` file, game rule, reward, storage, sync, save schema, palette or layout.
 
 - Fonts: no web fonts (offline PWA, nothing to download). Serif stack (headings, story, journal) now lists Iowan Old Style, Charter, Sitka Text, Palatino, Noto Serif, Georgia; UI stays on the system sans. Body 15px on mobile, 16px from 40rem. Story text 1.65 line height, 64ch. Form fields 16px (no iOS focus zoom). Tabular numerals for stats.

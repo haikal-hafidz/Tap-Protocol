@@ -13,8 +13,40 @@ const MORE_PAGES = [
   ['inventory', 'Inventory', 'What you carry, and the market stall.'],
   ['settings', 'Settings and save data', 'Rewards, export, import, cloud sync and reset.']
 ];
-const HOME_TABS = [['people', 'People'], ['family', 'Family'], ['personal', 'Personal']];
+const HOME_TABS = [['people', 'People', 'Your connections', 'people'], ['family', 'Family', 'Your inner circle', 'family'], ['personal', 'Personal', 'Your real life', 'personal']];
 const TITLES = { dashboard: 'Home', world: 'World', journal: 'Journal', character: 'Progress', more: 'More', tracker: 'Tracker', quests: 'Quests', inventory: 'Inventory', settings: 'Settings' };
+// Page heading copy (UX Session 4). Descriptive only; nothing here is game data.
+const HEADINGS = {
+  dashboard: ['Your dashboard', 'Where you are, how you are, and what is next.'],
+  world: ['Discover', 'Explore your world and its connections.'],
+  journal: ['Records', 'Your entries and history in one place.'],
+  character: ['Development', 'Review your character and progression.'],
+  more: ['Toolkit', 'Your systems, records, and settings.'],
+  tracker: ['Real life', 'Your real-life habits, goals and one-off tasks.'],
+  quests: ['Objectives', 'Jobs, deadlines and rewards.'],
+  inventory: ['Belongings', 'What you carry, and the market stall.'],
+  settings: ['Preferences', 'Rewards, save management and cloud sync.']
+};
+// Inline line icons: no emoji, no icon font, no network. They inherit the text colour.
+const svg = (d) => `<svg class="ico" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${d}</svg>`;
+const ICON = {
+  home: svg('<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/>'),
+  world: svg('<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3"/>'),
+  journal: svg('<rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>'),
+  progress: svg('<path d="M5 17l5-5 3 3 6-7"/><path d="M14 8h5v5"/>'),
+  more: svg('<path d="M5 7h14M5 12h14M5 17h14"/>'),
+  people: svg('<circle cx="12" cy="8" r="3.2"/><path d="M5.5 20c.6-3.8 3.1-5.5 6.5-5.5s5.9 1.7 6.5 5.5"/>'),
+  family: svg('<path d="M4 11l8-7 8 7"/><path d="M6 10v10h12V10"/><path d="M10 20v-5h4v5"/>'),
+  personal: svg('<path d="M12 4v16M4 12h16M6.3 6.3l11.4 11.4M17.7 6.3L6.3 17.7"/>'),
+  tracker: svg('<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M9 5v14"/>'),
+  quests: svg('<path d="M7 20V4"/><path d="M7 5h10l-2 3.5 2 3.5H7"/>'),
+  inventory: svg('<path d="M4 8l8-4 8 4v9l-8 4-8-4z"/><path d="M4 8l8 4 8-4M12 12v9"/>'),
+  settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'),
+  messages: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>'),
+  bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>'),
+  arrow: svg('<path d="M8 16l8-8M9 8h7v7"/>')
+};
+const NAV_ICON = { dashboard: 'home', world: 'world', journal: 'journal', character: 'progress', more: 'more' };
 const navOwner = (view) => MORE_PAGES.some((m) => m[0] === view) ? 'more' : view;
 const bgOf = (s) => D.BACKGROUNDS.find((b) => b.id === s.character.background);
 const traitOf = (s) => D.TRAITS.find((t) => t.id === s.character.trait);
@@ -62,6 +94,11 @@ export function createApp(root, deps) {
       <button class="btn ${p.ok ? 'primary' : ''}" data-action="do" ${data} aria-label="${esc(label + ': ' + title)}" ${p.ok ? '' : 'disabled'}>${esc(label)}</button></li>`;
   }
 
+  // Navigation row in the mockup's list-card style: icon tile, title, description and an arrow. Same nav action as before.
+  function listCard(view, title, desc) {
+    return `<div class="list-card"><div class="list-icon">${ICON[view]}</div><div class="text"><h3>${esc(title)}</h3><p>${esc(desc)}</p></div><button class="text-button go" data-action="nav" data-view="${view}" aria-label="Open ${esc(title)}">${ICON.arrow}</button></div>`;
+  }
+
   // Compact status summary shown above every page: who, where, money and the four meters.
   function needTags(s) {
     const n = s.needs, tags = [];
@@ -69,6 +106,17 @@ export function createApp(root, deps) {
     if (n.satiety < 20) tags.push(n.satiety === 0 ? 'Starving: losing health' : 'Hungry');
     if (n.health < 40) tags.push('Injured');
     return tags;
+  }
+  // Home: the status summary is the dark "player status" card from the approved mockup, built from the real save only.
+  function heroStatus(s) {
+    const c = s.character, n = s.needs, tags = needTags(s), need = R.expNeed(c.level);
+    const tile = (label, v, cls) => `<div class="stat"><span>${label}</span><b>${v}</b>${bar(v, 100, cls, label)}</div>`;
+    return `<section class="hero statusbar" aria-label="Status summary">
+      <div class="hero-top"><div><div class="eyebrow">Player status</div><h2><button class="who" data-action="nav" data-view="character" aria-label="${esc(c.name)}, level ${c.level}. Open Progress">${esc(c.name)}</button></h2><p>${esc(D.LOCATIONS[s.location].name)}</p></div><span class="level">Level ${c.level}</span></div>
+      <div class="meter">${bar(c.exp, need, 'exp', 'EXP')}</div><div class="small">${c.exp} / ${need} EXP</div>
+      <div class="stats">${tile('Health', n.health, 'health')}${tile('Energy', n.energy, 'energy')}${tile('Satiety', n.satiety, 'satiety')}<div class="stat"><span>Money</span><b>${s.money}</b></div></div>
+      ${tags.length ? `<p class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</p>` : ''}
+    </section>`;
   }
   function statusBar(s) {
     const c = s.character, n = s.needs, tags = needTags(s);
@@ -132,13 +180,13 @@ export function createApp(root, deps) {
     const rows = open.slice(0, 4).map((g) => `<li class="goal"><div class="attr-top"><strong>${esc(g.name)}</strong><span class="tag">${g.kind === 'goal' ? (g.target === 1 ? 'One-off task' : 'Goal') : g.cadence === 'weekly' ? 'Weekly habit' : 'Daily habit'}</span></div>
         <form data-form="record" class="row"><input type="hidden" name="goal" value="${g.id}"><button class="btn primary" type="submit">Record completion</button>${g.rpgLink && s.settings.integration ? '<small>Linked to the RPG.</small>' : ''}</form></li>`).join('');
     const rewardLine = s.settings.integration ? `Rewards are on: ${Math.min(used, D.TRACKER_REWARD.dailyCap)} of ${D.TRACKER_REWARD.dailyCap} paid today.` : 'Rewards are off.';
-    return `<section class="panel"><h2>Tracker goals</h2>${rows ? `<ul class="goals">${rows}</ul>` : s.tracker.goals.length ? '<p>Everything you track is done for now.</p>' : '<p>You are not tracking anything yet. Add a habit, goal or one-off task in the Tracker.</p>'}
+    return `<section class="panel missions"><div class="section-head"><h2>Tracker goals</h2><button class="text-button" data-action="nav" data-view="tracker" aria-label="View all in the Tracker">View all ${ICON.arrow}</button></div>${rows ? `<ul class="goals">${rows}</ul>` : s.tracker.goals.length ? '<p>Everything you track is done for now.</p>' : '<p>You are not tracking anything yet. Add a habit, goal or one-off task in the Tracker.</p>'}
       ${open.length > 4 ? `<p class="hint">${open.length - 4} more in the Tracker.</p>` : ''}<p class="hint">${rewardLine}</p>
       <button class="btn" data-action="nav" data-view="tracker">Open the full Tracker</button></section>`;
   }
 
   function dashboardView(s) {
-    const tabs = `<div class="tabs" role="group" aria-label="Home categories">${HOME_TABS.map(([id, label]) => `<button class="tab ${app.homeTab === id ? 'on' : ''}" data-action="home-tab" data-tab="${id}" aria-pressed="${app.homeTab === id}">${label}</button>`).join('')}</div>`;
+    const tabs = `<div class="tabs shortcuts" role="group" aria-label="Home categories">${HOME_TABS.map(([id, label, sub, ic]) => `<button class="tab shortcut ${app.homeTab === id ? 'on' : ''}" data-action="home-tab" data-tab="${id}" data-sub="${esc(sub)}" aria-pressed="${app.homeTab === id}">${ICON[ic]}${label}</button>`).join('')}</div>`;
     if (app.homeTab === 'people') {
       const here = R.npcsHere(s).map((id) => `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong> <span class="tag">${esc(R.relationLabel(s.relations[id] || 0))}</span><p>${esc(D.NPCS[id].role)}. ${esc(D.NPCS[id].desc)}</p></div><button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`).join('');
       const away = Object.keys(D.NPCS).filter((id) => !R.npcsHere(s).includes(id)).map((id) => { const at = R.npcLocation(id, s.clock); return `<li><strong>${esc(D.NPCS[id].name)}</strong> (${esc(D.NPCS[id].role)}): ${at ? `now at ${esc(D.LOCATIONS[at].name)}` : 'not around right now'}.</li>`; }).join('');
@@ -161,7 +209,8 @@ export function createApp(root, deps) {
         : `<p><strong>${esc(D.QUEST.name)}</strong>: ${q.q.status === 'completed' ? 'completed' : 'failed'}. See Quests for details.</p>`;
     const sug = R.suggestions(s);
     const recent = s.log.slice(-5).reverse();
-    return `${tabs}${homeGoals(s)}
+    const quick = `<section class="panel"><div class="section-head"><h2>Quick access</h2></div>${[['tracker', 'Tracker', 'Your real-life tasks and goals'], ['quests', 'Quests', 'Your current objectives'], ['inventory', 'Inventory', 'Items and collected resources']].map(([id, t, d]) => listCard(id, t, d)).join('')}</section>`;
+    return `${tabs}<div class="cols">${homeGoals(s)}${quick}</div>
       <div class="cols">
         <section class="panel"><h2>Active quest</h2>${questCard}</section>
         <section class="panel"><h2>Suggestions</h2>${sug.length ? `<ul class="plain">${sug.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : '<p>Nothing pressing.</p>'}</section>
@@ -183,9 +232,10 @@ export function createApp(root, deps) {
       return `<li class="skill"><div class="attr-top"><span>${k.name}</span><b>Level ${sk.level}</b></div>${bar(need ? sk.exp : 1, need || 1, '', k.name + ' skill')}<small>${need ? `${sk.exp}/${need} EXP. ` : 'Maximum. '}Trains ${esc(D.ATTRIBUTES.find((a) => a.id === k.attr).name)}. ${esc(k.desc)}</small></li>`;
     }).join('');
     const recent = s.log.filter((l) => l.changes.some((x) => /EXP|level|training|to \d+$/.test(x))).slice(-6).reverse();
-    return `<section class="window"><header><h2>${esc(c.name)}</h2><p class="sub">Age ${c.age}. Level ${c.level}. Hardcore.</p></header>
-      <p>${esc(c.appearance || 'No appearance description yet.')}</p>
-      <dl class="facts"><div><dt>Background</dt><dd>${esc(bg.name)}</dd></div><div><dt>Trait</dt><dd>${esc(tr.name)}</dd></div><div><dt>EXP</dt><dd>${c.exp}/${R.expNeed(c.level)}</dd></div><div><dt>Collapses</dt><dd>${s.stats.collapses}</dd></div></dl></section>
+    return `<section class="hero window" aria-label="Character overview"><div class="hero-top"><div><div class="eyebrow">Character overview</div><h2>${esc(c.name)}</h2><p>Age ${c.age}. Hardcore.</p></div><span class="level">Level ${c.level}</span></div>
+      <p class="appearance">${esc(c.appearance || 'No appearance description yet.')}</p>
+      <div class="meter">${bar(c.exp, R.expNeed(c.level), 'exp', 'EXP')}</div><div class="small">${c.exp} / ${R.expNeed(c.level)} EXP</div>
+      <dl class="facts stats"><div class="stat"><dt>Background</dt><dd>${esc(bg.name)}</dd></div><div class="stat"><dt>Trait</dt><dd>${esc(tr.name)}</dd></div><div class="stat"><dt>EXP</dt><dd>${c.exp}/${R.expNeed(c.level)}</dd></div><div class="stat"><dt>Collapses</dt><dd>${s.stats.collapses}</dd></div></dl></section>
       <section class="panel"><h2>Attributes</h2><p class="hint">A skill level-up adds training to its attribute. The attribute rises when training equals its current value.</p><div class="cols3">${attrs}</div></section>
       <section class="panel"><h2>Skills</h2><ul class="skills">${skills}</ul></section>
       <section class="panel"><h2>Recent progression</h2>${recent.length ? `<ul class="history">${recent.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> ${esc(l.title)}<small>${esc(l.changes.filter((x) => !x.startsWith('Time ') && !x.startsWith('Energy') && !x.startsWith('Satiety') && !x.startsWith('Health')).join('; '))}</small></li>`).join('')}</ul>` : '<p>No progression yet.</p>'}</section>
@@ -205,7 +255,7 @@ export function createApp(root, deps) {
   }
 
   function journalView(s) {
-    const tabs = `<div class="tabs" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
     if (app.journalTab === 'history') {
       const items = [...s.log].reverse();
       return `${tabs}<section class="panel"><h2>Activity history</h2>${items.length ? `<ul class="history">${items.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> <strong>${esc(l.title)}</strong>${l.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}${l.notes.length ? `<small>${esc(l.notes.join(' '))}</small>` : ''}${l.changes.length ? `<small>${esc(l.changes.join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>No activity yet. Things you do in the world are recorded here automatically.</p>'}</section>`;
@@ -320,17 +370,18 @@ export function createApp(root, deps) {
   }
 
   function moreView() {
-    const items = MORE_PAGES.map(([id, label, desc]) => `<li class="action"><div class="action-main"><strong>${label}</strong><p>${desc}</p></div><button class="btn primary" data-action="nav" data-view="${id}" aria-label="Open ${esc(label)}">Open</button></li>`).join('');
-    return `<section class="panel"><h2>Other pages</h2><ul class="actions">${items}</ul></section>`;
+    const row = (id) => { const m = MORE_PAGES.find((x) => x[0] === id); return listCard(m[0], m[1], m[2]); };
+    return `<div class="cols"><section class="panel"><h2>Daily life</h2>${['tracker', 'quests', 'inventory'].map(row).join('')}</section>
+      <section class="panel"><h2>Settings</h2>${row('settings')}</section></div>`;
   }
 
   function headerHtml(s) {
     const back = navOwner(app.view) === 'more' && app.view !== 'more' ? '<button class="btn small back" data-action="nav" data-view="more">Back to More</button>' : '';
     const nCount = notificationsList(s).length;
-    const tool = (id, label, extra = '') => `<button class="toolbtn ${app.panel === id ? 'on' : ''}" data-action="panel" data-panel="${id}" aria-expanded="${app.panel === id}" aria-controls="header-panel">${label}${extra}</button>`;
-    return `<header class="appbar"><div class="appbar-id"><p class="apptitle">TAP Protocol</p><p class="gametime" aria-label="Game time">${esc(R.formatClock(s.clock))}, ${esc(R.periodOf(s.clock).toLowerCase())}</p></div>
-      <div class="appbar-tools">${tool('messages', 'Messages')}${tool('notifications', 'Notifications', nCount ? ` <span class="badge" aria-label="${nCount} new">${nCount}</span>` : '')}</div>
-      <div class="appbar-sub">${back}<p id="save-status" class="savestat" role="status">${esc(app.saveStatus)}</p></div></header>`;
+    const tool = (id, label, icon, extra = '') => `<button class="toolbtn ${app.panel === id ? 'on' : ''}" data-action="panel" data-panel="${id}" aria-expanded="${app.panel === id}" aria-controls="header-panel">${icon}<span class="tl">${label}</span>${extra}</button>`;
+    return `<header class="appbar"><div class="appbar-id"><p class="apptitle">TAP Protocol</p><p class="tagline">Your life. Your world. Your protocol.</p></div>
+      <div class="appbar-tools">${tool('messages', 'Messages', ICON.messages)}${tool('notifications', 'Notifications', ICON.bell, nCount ? ` <span class="badge" aria-label="${nCount} new">${nCount}</span>` : '')}</div>
+      <div class="appbar-sub"><p class="gametime" aria-label="Game time">${esc(R.formatClock(s.clock))}, ${esc(R.periodOf(s.clock).toLowerCase())}</p>${back}<p id="save-status" class="savestat" role="status">${esc(app.saveStatus)}</p></div></header>`;
   }
 
   function panelHtml(s) {
@@ -370,9 +421,9 @@ export function createApp(root, deps) {
     const here = navOwner(app.view);
     const keep = focusKey();
     captureDrafts();
-    const nav = NAV.map(([id, label]) => `<button class="navbtn ${here === id ? 'on' : ''}" data-action="nav" data-view="${id}" ${here === id ? 'aria-current="page"' : ''}>${label}</button>`).join('');
+    const nav = NAV.map(([id, label]) => `<button class="navbtn ${here === id ? 'on' : ''}" data-action="nav" data-view="${id}" ${here === id ? 'aria-current="page"' : ''}>${ICON[NAV_ICON[id]]}${label}</button>`).join('');
     root.innerHTML = `<div class="app"${app.pending || app.confirmDlg ? ' inert aria-hidden="true"' : ''}>
-      <main class="main" id="main" tabindex="-1">${headerHtml(s)}${app.saveError ? `<section class="report fail" role="alert"><p><strong>Your last change could not be saved on this device.</strong> ${esc(app.saveError)}</p><p class="hint">Keep this tab open and use More, Settings and save data, Export save file to keep a copy.</p></section>` : ''}${panelHtml(s)}${statusBar(s)}<h1 class="viewtitle">${TITLES[app.view]}</h1>${reportHtml(app.report)}${body}</main>
+      <main class="main" id="main" tabindex="-1">${headerHtml(s)}${app.saveError ? `<section class="report fail" role="alert"><p><strong>Your last change could not be saved on this device.</strong> ${esc(app.saveError)}</p><p class="hint">Keep this tab open and use More, Settings and save data, Export save file to keep a copy.</p></section>` : ''}${panelHtml(s)}<div class="page-heading"><div><div class="eyebrow">Pithe / ${esc(HEADINGS[app.view][0])}</div><h1 class="viewtitle">${TITLES[app.view]}</h1><p class="lede">${esc(HEADINGS[app.view][1])}</p></div></div>${app.view === 'dashboard' ? heroStatus(s) : statusBar(s)}${reportHtml(app.report)}${body}</main>
       <nav class="nav" aria-label="Main"><div class="navlist">${nav}</div></nav></div>${modalHtml()}`;
     restoreDrafts();
     manageFocus();

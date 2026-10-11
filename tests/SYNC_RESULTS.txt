@@ -1,9 +1,3 @@
-UX Session 2 Part 2, 2026-10-11, Node v22.22.2
-
-
-> tap-protocol@0.2.2 test:sync
-> node tests/sync.mjs
-
 PASS  decide(): every row of the decision table
 PASS  hashState(): ignores key order (jsonb reorders keys) but notices every value change
 PASS  parseAuthFragment() / redirectUrl() for the GitHub Pages sub-path
@@ -49,44 +43,3 @@ PASS  v0.2.2: the cloud moves in the instant between "Keep this device" and its 
 PASS  v0.2.2: a save that keeps changing during sync is not stuck on "Syncing" and the latest version still reaches the cloud (guard test; it also passes on v0.2.1)
 
 43 passed, 0 failed
-
-
-> tap-protocol@0.2.2 test:rls
-> node tests/rls.mjs
-
-PASS  migration is idempotent (ran twice without error)
-PASS  RLS is enabled and forced on cloud_saves
-PASS  user 1 inserts a save: revision is forced to 1 (even if the client sends 99), owner forced to the caller
-PASS  user 2 cannot see user 1's row; user 2 inserts their own
-PASS  user 2 cannot update user 1's row (0 rows) and cannot read it with a filter
-PASS  user 2 cannot insert a second row, nor a row claiming to be user 1 (the owner is forced to the caller)
-PASS  anonymous (signed-out) role: no access at all
-PASS  delete is not allowed for signed-in users (no delete grant, no policy)
-PASS  compare-and-set: update where revision = 1 succeeds and the TRIGGER sets revision 2 (client-sent value ignored)
-PASS  replay / stale writer: update where revision = 1 again matches ZERO rows (that is the conflict signal)
-PASS  the owner cannot be changed by an update; updated_at moves forward
-PASS  payload must be a JSON object
-PASS  sequential revisions never skip or repeat
-
-13 passed, 0 failed
-
-
-> tap-protocol@0.2.2 test:sync-browser
-> node tests/sync-browser.mjs
-
-== Cloud sync in a real browser (stand-in server) ==
-PASS  with no config the game runs exactly as before (cloud panel says not set up, no network calls)
-PASS  v0.2.2: filling in the key later works WITHOUT re-stamping the cache (config.js is network-first), and stays available offline afterwards
-PASS  sign-up on the laptop (email confirmation ON) shows the check-your-email notice; no session yet
-PASS  clicking the email link returns to the GitHub-Pages sub-path, signs in, removes the tokens from the address bar, uploads the save
-PASS  the phone (no save) signs in: setup screen offers the cloud panel, Restore downloads the same character, nothing is uploaded
-PASS  a change on the laptop reaches the phone when it is opened again; no echo back
-PASS  typing in the journal is not wiped when sync status changes in the background (no full re-render)
-PASS  OFFLINE edits queue and sync once, automatically, when the connection returns
-PASS  the game still launches and plays fully offline with sync configured (service worker precached the new files)
-PASS  conflict: both sides changed while apart -> dialog with both saves, nothing overwritten, then the player chooses (Escape closes it without writing)
-PASS  sign-out keeps the local save and the cloud row; the panel returns to the sign-in form
-PASS  server failure (500s): plain message, game keeps working, retry button recovers
-PASS  export and import still work and an import is synced like any other local change; RESET still deletes only the local save
-
-13 passed, 0 failed
