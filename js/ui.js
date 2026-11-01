@@ -8,20 +8,32 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 // Settings (with save management) are pages reached through More. Progress is character progression only.
 const NAV = [['dashboard', 'Home'], ['world', 'World'], ['journal', 'Journal'], ['character', 'Progress'], ['more', 'More']];
 const MORE_PAGES = [
+  ['career', 'Career & Jobs', 'Employment, job listings, and career development.'],
+  ['education', 'Education & Courses', 'University degrees and vocational certificates.'],
+  ['finances', 'Finances & Banking', 'Personal ledger, bank accounts, and savings.'],
+  ['properties', 'Property & Business', 'Real estate ownership and business enterprises.'],
   ['tracker', 'Tracker', 'Real-life habits and goals.'],
   ['quests', 'Quests', 'Jobs and their deadlines.'],
   ['inventory', 'Inventory', 'What you carry, and the market stall.'],
   ['settings', 'Settings and save data', 'Rewards, export, import, cloud sync and reset.']
 ];
 const HOME_TABS = [['people', 'People', 'Your connections', 'people'], ['family', 'Family', 'Your inner circle', 'family'], ['personal', 'Personal', 'Your real life', 'personal']];
-const TITLES = { dashboard: 'Home', world: 'World', journal: 'Journal', character: 'Progress', more: 'More', tracker: 'Tracker', quests: 'Quests', inventory: 'Inventory', settings: 'Settings' };
+const TITLES = {
+  dashboard: 'Home', world: 'World', journal: 'Journal', character: 'Progress', more: 'More',
+  career: 'Career', education: 'Education', finances: 'Finances', properties: 'Properties & Business',
+  tracker: 'Tracker', quests: 'Quests', inventory: 'Inventory', settings: 'Settings'
+};
 // Page heading copy (UX Session 4). Descriptive only; nothing here is game data.
 const HEADINGS = {
   dashboard: ['Your dashboard', 'Where you are, how you are, and what is next.'],
-  world: ['Discover', 'Explore your world and its connections.'],
-  journal: ['Records', 'Your entries and history in one place.'],
+  world: ['Discover', 'Explore your modern world and its connections.'],
+  journal: ['Records', 'Your entries, activity history, and life chronicle.'],
   character: ['Development', 'Review your character and progression.'],
   more: ['Toolkit', 'Your systems, records, and settings.'],
+  career: ['Employment', 'Corporate careers, professional opportunities, and work performance.'],
+  education: ['Academics & Skills', 'University programs, vocational credentials, and study.'],
+  finances: ['Ledger & Accounts', 'Personal finances, banking transactions, and expense records.'],
+  properties: ['Assets & Ventures', 'Residential housing, commercial real estate, and business operations.'],
   tracker: ['Real life', 'Your real-life habits, goals and one-off tasks.'],
   quests: ['Objectives', 'Jobs, deadlines and rewards.'],
   inventory: ['Belongings', 'What you carry, and the market stall.'],
@@ -44,7 +56,11 @@ const ICON = {
   settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'),
   messages: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="2"/><path d="M4 7l8 6 8-6"/>'),
   bell: svg('<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5h4"/>'),
-  arrow: svg('<path d="M8 16l8-8M9 8h7v7"/>')
+  arrow: svg('<path d="M8 16l8-8M9 8h7v7"/>'),
+  career: svg('<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V4h6v3M4 12h16"/>'),
+  education: svg('<path d="M12 3l10 5-10 5-10-5z"/><path d="M6 10.5v5c0 2 3 3.5 6 3.5s6-1.5 6-3.5v-5"/><path d="M22 8v6"/>'),
+  finances: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h2"/>'),
+  properties: svg('<path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h2M13 10h2M9 14h2M13 14h2"/>')
 };
 const NAV_ICON = { dashboard: 'home', world: 'world', journal: 'journal', character: 'progress', more: 'more' };
 const navOwner = (view) => MORE_PAGES.some((m) => m[0] === view) ? 'more' : view;
@@ -188,13 +204,48 @@ export function createApp(root, deps) {
   function dashboardView(s) {
     const tabs = `<div class="tabs shortcuts" role="group" aria-label="Home categories">${HOME_TABS.map(([id, label, sub, ic]) => `<button class="tab shortcut ${app.homeTab === id ? 'on' : ''}" data-action="home-tab" data-tab="${id}" data-sub="${esc(sub)}" aria-pressed="${app.homeTab === id}">${ICON[ic]}${label}</button>`).join('')}</div>`;
     if (app.homeTab === 'people') {
-      const here = R.npcsHere(s).map((id) => `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong> <span class="tag">${esc(R.relationLabel(s.relations[id] || 0))}</span><p>${esc(D.NPCS[id].role)}. ${esc(D.NPCS[id].desc)}</p></div><button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`).join('');
-      const away = Object.keys(D.NPCS).filter((id) => !R.npcsHere(s).includes(id)).map((id) => { const at = R.npcLocation(id, s.clock); return `<li><strong>${esc(D.NPCS[id].name)}</strong> (${esc(D.NPCS[id].role)}): ${at ? `now at ${esc(D.LOCATIONS[at].name)}` : 'not around right now'}.</li>`; }).join('');
+      const rels = s.relationships || {};
+      const here = R.npcsHere(s).map((id) => {
+        const r = rels[id] || { affinity: 0, trust: 0, romanceStatus: 'none', status: 'stranger' };
+        return `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong> <span class="tag">${esc(R.relationLabel(s.relations[id] || 0))}</span>${r.romanceStatus !== 'none' ? `<span class="tag">${esc(r.romanceStatus)}</span>` : ''}<p>${esc(D.NPCS[id].role)}. Affinity: ${r.affinity}/100, Trust: ${s.relations[id] || 0}</p></div>
+          <div class="row"><button class="btn" data-action="open-talk" data-npc="${id}">Talk</button>
+          <button class="btn" data-action="do" data-kind="social_interact" data-npc="${id}" data-interact-type="hangout">Hangout</button>
+          <button class="btn" data-action="do" data-kind="social_interact" data-npc="${id}" data-interact-type="gift">Gift ($25)</button>
+          <button class="btn primary" data-action="do" data-kind="romance_action" data-npc="${id}" data-romance-type="date">Date ($35)</button></div></li>`;
+      }).join('');
+      const away = Object.keys(D.NPCS).filter((id) => !R.npcsHere(s).includes(id)).map((id) => {
+        const at = R.npcLocation(id, s.clock);
+        const r = rels[id] || { affinity: 0, trust: 0, romanceStatus: 'none' };
+        return `<li><strong>${esc(D.NPCS[id].name)}</strong> (${esc(D.NPCS[id].role)}): ${at ? `now at ${esc(D.LOCATIONS[at].name)}` : 'not around right now'}. Affinity: ${r.affinity}/100.</li>`;
+      }).join('');
       return `${tabs}<section class="panel"><h2>People here</h2>${here ? `<ul class="actions">${here}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
-        ${away ? `<section class="panel"><h2>Elsewhere</h2><ul class="plain">${away}</ul><p class="hint">Open World for travel and the full schedule.</p></section>` : ''}`;
+        ${away ? `<section class="panel"><h2>Elsewhere in the Metropolis</h2><ul class="plain">${away}</ul><p class="hint">Open World for travel and locations.</p></section>` : ''}`;
     }
     if (app.homeTab === 'family') {
-      return `${tabs}<section class="panel"><h2>Family</h2><p>Pithe has no family in the Harbor Quarter yet, and this version of the world has no family members to meet.</p><p class="hint">Where Pithe comes from: ${esc(bgOf(s).circumstance)}</p></section>`;
+      const fam = s.family || { spouse: null, children: [] };
+      const house = s.housing && D.PROPERTIES[s.housing.primaryHome] ? D.PROPERTIES[s.housing.primaryHome] : D.PROPERTIES.rented_room;
+      if (!fam.spouse && (!fam.children || !fam.children.length)) {
+        return `${tabs}<section class="panel"><h2>Family</h2><p>Pithe has no family in the Harbor Quarter yet, and this version of the world has no family members to meet.</p><p class="hint">Where Pithe comes from: ${esc(bgOf(s).circumstance)}</p></section>`;
+      }
+      const spouseHtml = fam.spouse
+        ? `<div class="action-main"><strong>Spouse: ${esc(fam.spouse.name)}</strong><p>Married on ${esc(fam.spouse.weddingDate)}</p></div>
+           <div class="row">${house.maxOccupants > 1 + fam.children.length ? `<button class="btn primary" data-action="do" data-kind="family_action" data-family-type="have_child">Have Child</button>` : `<p class="hint">Current home (${esc(house.name)}) is full. Move to a larger residence to grow family.</p>`}</div>`
+        : `<p>Pithe is not currently married. Develop close relationships with romantic partners to propose marriage.</p>`;
+
+      const childrenHtml = fam.children.length
+        ? `<ul class="plain">${fam.children.map((ch) => `<li><strong>${esc(ch.name)}</strong> (Age ${ch.age}) - Born: ${esc(ch.birthDate)}. Affection: ${ch.relationshipScore}/100</li>`).join('')}</ul>
+           <button class="btn primary" data-action="do" data-kind="family_action" data-family-type="parenting">Family Time & Parenting (2h)</button>`
+        : `<p>No children in household.</p>`;
+
+      return `${tabs}<div class="cols">
+        <section class="panel"><h2>Household & Spouse</h2>${spouseHtml}</section>
+        <section class="panel"><h2>Children & Family</h2>${childrenHtml}</section>
+      </div>
+      <section class="panel"><h2>Primary Residence</h2>
+        <p><strong>${esc(house.name)}</strong> at ${esc(D.LOCATIONS[house.location]?.name || house.location)}</p>
+        <p>${esc(house.desc)} Capacity: ${house.maxOccupants} occupants.</p>
+        <button class="btn" data-action="nav" data-view="properties">Manage Housing & Real Estate</button>
+      </section>`;
     }
     const acts = R.locationActivities(s).map((a) => actionCard(a.name, a.desc, { kind: 'activity', id: a.id }, R.preview(s, { kind: 'activity', id: a.id }), 'Start')).join('');
     const go = Object.keys(D.LOCATIONS).filter((id) => id !== s.location).map((id) => {
@@ -255,10 +306,17 @@ export function createApp(root, deps) {
   }
 
   function journalView(s) {
-    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
     if (app.journalTab === 'history') {
       const items = [...s.log].reverse();
       return `${tabs}<section class="panel"><h2>Activity history</h2>${items.length ? `<ul class="history">${items.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> <strong>${esc(l.title)}</strong>${l.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}${l.notes.length ? `<small>${esc(l.notes.join(' '))}</small>` : ''}${l.changes.length ? `<small>${esc(l.changes.join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>No activity yet. Things you do in the world are recorded here automatically.</p>'}</section>`;
+    }
+    if (app.journalTab === 'chronicle') {
+      const chron = [...(s.chronicle || [])].reverse();
+      return `${tabs}<section class="panel"><h2>Life Chronicle & Milestones</h2>
+        <p class="hint">A persistent record of your major life achievements, career steps, degrees, marriages, family, and ventures.</p>
+        ${chron.length ? `<ul class="history">${chron.map((c) => `<li><div class="attr-top"><strong>${esc(c.title)}</strong><span class="tag">${esc(c.category)}</span></div><small>${esc(c.date)} (Year ${esc(c.year)})</small><p class="story">${esc(c.desc)}</p></li>`).join('')}</ul>` : '<p>No milestones recorded yet. Live your life, find work, earn degrees, and make connections to build your chronicle.</p>'}
+      </section>`;
     }
     const entries = [...s.journal].reverse();
     return `${tabs}<section class="panel"><h2>New entry</h2>
@@ -369,10 +427,130 @@ export function createApp(root, deps) {
       <section class="panel"><h2>Lantern Market stall</h2>${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}<p class="hint">Teo trades here 07:00-15:00 (Mon-Sat) and on Saturday 17:00-22:00. You must be at the market. Selling pays about half the price.</p><ul class="actions">${shop}</ul></section>`;
   }
 
+  function careerView(s) {
+    const curId = s.career?.currentJob;
+    const cur = curId ? D.JOBS[curId] : null;
+    const currentCard = cur
+      ? `<div class="action-main"><strong>${esc(cur.title)}</strong> <span class="tag">${esc(cur.industry)}</span>
+         <p>${esc(cur.company)} - Location: ${esc(D.LOCATIONS[cur.location]?.name || cur.location)}</p>
+         <p>Weekly Salary: ${cur.salary} money | Performance: <strong>${s.career.performance}/100</strong></p>
+         <p>Experience: ${Math.floor(s.career.experienceDays || 0)} days on the job (${s.career.shiftsWorked || 0} shifts completed).</p></div>
+         <div class="row"><button class="btn primary" data-action="do" data-kind="job_work">Work Shift (4h)</button>
+         ${cur.nextJob ? `<button class="btn" data-action="do" data-kind="job_promote">Apply for Promotion to ${esc(D.JOBS[cur.nextJob]?.title || 'Next Tier')}</button>` : ''}
+         <button class="btn danger" data-action="do" data-kind="job_resign">Resign</button></div>`
+      : '<p>You are not currently employed. Select a job vacancy below to apply.</p>';
+
+    const vacancies = Object.values(D.JOBS).filter((j) => j.id !== curId).map((j) => {
+      const check = R.checkJobPrerequisites(s, j.id);
+      const reqLines = [];
+      if (j.requirements?.qualification) reqLines.push(`Qualification: ${D.EDUCATION_PROGRAMS[j.requirements.qualification]?.name || j.requirements.qualification}`);
+      if (j.requirements?.attributes) reqLines.push('Attributes: ' + Object.entries(j.requirements.attributes).map(([a, v]) => `${a} ${v}+`).join(', '));
+      if (j.requirements?.skills) reqLines.push('Skills: ' + Object.entries(j.requirements.skills).map(([sk, v]) => `${sk} ${v}+`).join(', '));
+      if (j.requirements?.expDays) reqLines.push(`Experience: ${j.requirements.expDays} days`);
+
+      return `<li class="action ${check.ok ? '' : 'blocked'}"><div class="action-main"><strong>${esc(j.title)}</strong> <span class="tag">${esc(j.industry)}</span>
+        <p>${esc(j.company)} - ${esc(D.LOCATIONS[j.location]?.name || j.location)}</p>
+        <p>Salary: ${j.salary} money/week. ${esc(j.desc)}</p>
+        <p class="meta">${reqLines.map((r) => `<span class="chip">${esc(r)}</span>`).join('')}</p>
+        ${check.ok ? '' : `<p class="why">${esc(check.error)}</p>`}</div>
+        <button class="btn ${check.ok ? 'primary' : ''}" data-action="do" data-kind="job_apply" data-id="${j.id}" ${check.ok ? '' : 'disabled'}>Apply</button></li>`;
+    }).join('');
+
+    return `<section class="panel"><h2>Active Career</h2>${currentCard}</section>
+      <section class="panel"><h2>Metropolitan Job Openings</h2><ul class="actions">${vacancies}</ul></section>`;
+  }
+
+  function educationView(s) {
+    const edu = s.education || { enrolled: [], completed: [], qualifications: [] };
+    const enrolledHtml = edu.enrolled.length
+      ? edu.enrolled.map((e) => {
+          const prog = D.EDUCATION_PROGRAMS[e.id];
+          return `<div class="action"><div class="action-main"><strong>${esc(prog.name)}</strong> <span class="tag">${esc(prog.category)}</span>
+            <p>${esc(prog.institution)} - Progress: ${e.hoursCompleted}/${e.totalHours} study hours</p>
+            ${bar(e.hoursCompleted, e.totalHours, 'exp', 'Course progress')}</div>
+            <button class="btn primary" data-action="do" data-kind="edu_study" data-id="${e.id}">Study (2h)</button></div>`;
+        }).join('')
+      : '<p>You are not currently enrolled in any academic or training course.</p>';
+
+    const catalog = Object.values(D.EDUCATION_PROGRAMS).map((prog) => {
+      const isEnrolled = edu.enrolled.some((e) => e.id === prog.id);
+      const isDone = edu.qualifications.includes(prog.qualification);
+      const canAfford = s.money >= prog.cost;
+      return `<li class="action ${isDone || isEnrolled ? '' : canAfford ? '' : 'blocked'}"><div class="action-main"><strong>${esc(prog.name)}</strong> <span class="tag">${esc(prog.category)}</span>
+        <p>${esc(prog.institution)} - Tuition: ${prog.cost} money, Duration: ${prog.totalHoursNeeded}h</p>
+        <p>${esc(prog.desc)}</p>
+        <p class="meta"><span class="chip">Credential: ${esc(prog.qualification)}</span></p></div>
+        ${isDone ? '<span class="tag">Graduated</span>' : isEnrolled ? `<button class="btn primary" data-action="do" data-kind="edu_study" data-id="${prog.id}">Study</button>` : `<button class="btn ${canAfford ? 'primary' : ''}" data-action="do" data-kind="edu_enroll" data-id="${prog.id}" ${canAfford ? '' : 'disabled'}>Enroll (${prog.cost} money)</button>`}</li>`;
+    }).join('');
+
+    return `<section class="panel"><h2>Current Studies</h2>${enrolledHtml}</section>
+      ${edu.qualifications.length ? `<section class="panel"><h2>Earned Credentials</h2><ul class="plain">${edu.qualifications.map((q) => `<li><strong>${esc(q)}</strong></li>`).join('')}</ul></section>` : ''}
+      <section class="panel"><h2>Course Catalog</h2><ul class="actions">${catalog}</ul></section>`;
+  }
+
+  function financesView(s) {
+    const fin = s.finances || { bank: 0, history: [] };
+    const hist = [...fin.history].reverse().slice(0, 30);
+    return `<div class="cols">
+      <section class="panel"><h2>Personal Accounts</h2>
+        <div class="stat-row"><p>Cash in Pocket: <strong>${s.money}</strong> money</p>
+        <p>Savings Bank Balance: <strong>${fin.bank}</strong> money</p></div>
+        <p class="hint">Weekly salaries and business earnings are credited automatically through the transaction ledger. Living expenses ($2/day) and rents/maintenance are deducted deterministically.</p>
+      </section></div>
+      <section class="panel"><h2>Transaction Ledger (Last 30 Records)</h2>
+        ${hist.length ? `<ul class="history">${hist.map((t) => `<li><span class="when">${esc(R.formatClock(t.clock))}</span> <strong>${esc(t.desc)}</strong> <span class="tag">${esc(t.category)}</span> <span class="${t.amount >= 0 ? 'good' : 'warn'}">${t.amount >= 0 ? '+' : ''}${t.amount}</span> (Cash: ${t.cashAfter}, Bank: ${t.bankAfter})</li>`).join('')}</ul>` : '<p>No recorded financial transactions yet.</p>'}
+      </section>`;
+  }
+
+  function propertiesView(s) {
+    const house = s.housing || { primaryHome: 'rented_room', rentals: ['rented_room'], owned: [] };
+    const biz = s.business || { owned: [] };
+
+    const propsList = Object.values(D.PROPERTIES).map((prop) => {
+      const isPrimary = house.primaryHome === prop.id;
+      const isRented = house.rentals.includes(prop.id);
+      const isOwned = house.owned.includes(prop.id);
+
+      return `<li class="action"><div class="action-main"><strong>${esc(prop.name)}</strong> <span class="tag">${esc(prop.category)}</span>${isPrimary ? '<span class="tag">Primary Home</span>' : ''}
+        <p>${esc(prop.desc)} Location: ${esc(D.LOCATIONS[prop.location]?.name || prop.location)}</p>
+        <p>Rent: ${prop.rentCost}/wk ${prop.canBuy ? `| Purchase Deed: ${prop.buyPrice} money (Maint: ${prop.maintenance}/wk)` : ''}</p></div>
+        <div class="row">
+        ${isOwned ? '<span class="tag">Owned</span>' : isRented ? '<span class="tag">Leased</span>' : `<button class="btn" data-action="do" data-kind="property_rent" data-id="${prop.id}">Lease ($0/mo)</button>`}
+        ${!isOwned && prop.canBuy ? `<button class="btn primary" data-action="do" data-kind="property_buy" data-id="${prop.id}">Buy ($0)</button>` : ''}
+        ${(isOwned || isRented) && !isPrimary && prop.type === 'residential' ? `<button class="btn" data-action="do" data-kind="property_move" data-id="${prop.id}">Move Here ($20)</button>` : ''}
+        </div></li>`;
+    }).join('');
+
+    const bizList = biz.owned.length
+      ? biz.owned.map((b) => {
+          const def = D.BUSINESS_TYPES[b.type];
+          return `<div class="action"><div class="action-main"><strong>${esc(b.name)}</strong> <span class="tag">${esc(def.industry)}</span>
+            <p>Tier ${b.upgradeLevel} | Staff: ${b.staffCount} | Reputation: ${b.reputation}/100</p>
+            <p>Total Revenue: ${b.totalRevenue} | Total Expenses: ${b.totalExpenses}</p></div>
+            <div class="row"><button class="btn" data-action="do" data-kind="business_manage" data-id="${b.id}" data-manage-type="hire">Hire Staff ($40)</button>
+            <button class="btn primary" data-action="do" data-kind="business_manage" data-id="${b.id}" data-manage-type="upgrade">Upgrade Facility ($150)</button></div></div>`;
+        }).join('')
+      : '<p>You do not currently own any business ventures.</p>';
+
+    const ventures = Object.values(D.BUSINESS_TYPES).map((v) => {
+      const canAfford = s.money >= v.startupCost;
+      return `<li class="action ${canAfford ? '' : 'blocked'}"><div class="action-main"><strong>${esc(v.name)}</strong> <span class="tag">${esc(v.industry)}</span>
+        <p>${esc(v.desc)} Location: ${esc(D.LOCATIONS[v.location]?.name || v.location)}</p>
+        <p>Startup Capital: ${v.startupCost} money | Est. Weekly Net: +${v.baseWeeklyRevenue - v.baseWeeklyExpenses}</p></div>
+        <button class="btn ${canAfford ? 'primary' : ''}" data-action="do" data-kind="business_found" data-id="${v.id}" ${canAfford ? '' : 'disabled'}>Found Business ($0)</button></li>`;
+    }).join('');
+
+    return `<section class="panel"><h2>Real Estate & Residences</h2><ul class="actions">${propsList}</ul></section>
+      <section class="panel"><h2>Your Enterprises</h2>${bizList}</section>
+      <section class="panel"><h2>Found a New Business</h2><ul class="actions">${ventures}</ul></section>`;
+  }
+
   function moreView() {
     const row = (id) => { const m = MORE_PAGES.find((x) => x[0] === id); return listCard(m[0], m[1], m[2]); };
-    return `<div class="cols"><section class="panel"><h2>Daily life</h2>${['tracker', 'quests', 'inventory'].map(row).join('')}</section>
-      <section class="panel"><h2>Settings</h2>${row('settings')}</section></div>`;
+    return `<div class="cols">
+      <section class="panel"><h2>Life & Enterprise</h2>${['career', 'education', 'finances', 'properties'].map(row).join('')}</section>
+      <section class="panel"><h2>Daily Life & System</h2>${['tracker', 'quests', 'inventory', 'settings'].map(row).join('')}</section>
+    </div>`;
   }
 
   function headerHtml(s) {
@@ -417,7 +595,13 @@ export function createApp(root, deps) {
   function render() {
     if (!app.state) { root.innerHTML = setupHtml(); return; }
     const s = app.state;
-    const body = { dashboard: dashboardView, character: characterView, journal: journalView, tracker: trackerView, world: worldView, quests: questsView, inventory: inventoryView, settings: settingsView, more: moreView }[app.view](s);
+    const viewFns = {
+      dashboard: dashboardView, character: characterView, journal: journalView,
+      tracker: trackerView, world: worldView, quests: questsView, inventory: inventoryView,
+      settings: settingsView, more: moreView, career: careerView, education: educationView,
+      finances: financesView, properties: propertiesView
+    };
+    const body = (viewFns[app.view] || dashboardView)(s);
     const here = navOwner(app.view);
     const keep = focusKey();
     captureDrafts();
@@ -528,7 +712,7 @@ export function createApp(root, deps) {
   function readAction(el) {
     const d = el.dataset;
     const a = { kind: d.kind };
-    for (const k of ['id', 'to', 'npc', 'topic', 'item']) if (d[k] !== undefined) a[k] = d[k];
+    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName']) if (d[k] !== undefined) a[k] = d[k];
     return a;
   }
 

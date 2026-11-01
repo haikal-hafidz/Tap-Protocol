@@ -18,6 +18,16 @@ const diminish = (n) => (n < 2 ? 1 : n < 4 ? 0.5 : 0);
 // ---------------------------------------------------------------- time
 export function clockDate(clock) { return new Date(D.START_UTC + clock * 60000); }
 export function dayKey(clock) { return clockDate(clock).toISOString().slice(0, 10); }
+export function monthKey(clock) { return clockDate(clock).toISOString().slice(0, 7); }
+export function yearKey(clock) { return clockDate(clock).toISOString().slice(0, 4); }
+export function dateParts(clock) {
+  const d = clockDate(clock);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate(), weekday: d.getUTCDay(), hour: d.getUTCHours(), minute: d.getUTCMinutes() };
+}
+export function formatDateOnly(clock) {
+  const d = clockDate(clock);
+  return `${DAY_NAMES[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
 export function hourOf(clock) { const d = clockDate(clock); return d.getUTCHours() + d.getUTCMinutes() / 60; }
 export function weekdayOf(clock) { return clockDate(clock).getUTCDay(); }
 export function formatClock(clock) {
@@ -115,6 +125,15 @@ export function createCharacter(o = {}) {
     stats: { collapses: 0, actions: 0 },
     nextId: 1
   };
+  ensureFinances(state);
+  ensureCalendar(state);
+  ensureCareer(state);
+  ensureEducation(state);
+  ensureHousing(state);
+  ensureBusiness(state);
+  ensureRelationships(state);
+  ensureFamily(state);
+  ensureChronicle(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -142,6 +161,15 @@ export function migrateState(s) {
   for (const [k, fallback] of [['energy', 50], ['satiety', 50], ['health', 50]]) {
     if (!Number.isFinite(s.needs[k])) s.needs[k] = fallback;
   }
+  ensureFinances(s);
+  ensureCalendar(s);
+  ensureCareer(s);
+  ensureEducation(s);
+  ensureHousing(s);
+  ensureBusiness(s);
+  ensureRelationships(s);
+  ensureFamily(s);
+  ensureChronicle(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -152,6 +180,7 @@ function nextId(state) { return state.nextId++; }
 function ensureDay(state) {
   const k = dayKey(state.clock);
   if (state.daily.day !== k) state.daily = { day: k, counts: {} };
+  processCalendarTransitions(state);
 }
 function count(state, key) { return state.daily.day === dayKey(state.clock) ? (state.daily.counts[key] || 0) : 0; }
 function bump(state, key) { ensureDay(state); state.daily.counts[key] = (state.daily.counts[key] || 0) + 1; }
@@ -366,6 +395,844 @@ function updateQuest(state) {
   mark('notebook', (state.inventory.notebook || 0) > 0);
   mark('insight', !!state.flags.heardRegulars);
   mark('drafts', q.drafts >= D.QUEST.draftsNeeded);
+}
+
+
+// ---------------------------------------------------------------- financial transaction ledger
+export function ensureFinances(state) {
+  if (!state.finances) {
+    state.finances = {
+      bank: 0,
+      savingsGoal: 0,
+      history: []
+    };
+  }
+}
+
+export function transact(state, opts = {}) {
+  const amount = Number(opts.amount) || 0;
+  const category = opts.category || 'general';
+  const desc = opts.desc || 'Transaction';
+  const useBank = !!opts.fromBank;
+
+  ensureFinances(state);
+  const fin = state.finances;
+
+  if (amount < 0) {
+    const cost = Math.abs(amount);
+    if (useBank) {
+      if (fin.bank < cost) return { ok: false, error: `Insufficient bank balance (need ${cost}, have ${fin.bank}).` };
+      fin.bank -= cost;
+    } else {
+      if (state.money < cost) {
+        const deficit = cost - state.money;
+        if (fin.bank >= deficit) {
+          fin.bank -= deficit;
+          state.money = 0;
+        } else {
+          state.money = Math.max(0, state.money - cost);
+        }
+      } else {
+        state.money -= cost;
+      }
+    }
+  } else if (amount > 0) {
+    if (opts.toBank) fin.bank += amount;
+    else state.money += amount;
+  }
+
+  const entry = {
+    id: nextId(state),
+    clock: state.clock,
+    amount,
+    category,
+    desc,
+    cashAfter: state.money,
+    bankAfter: fin.bank
+  };
+  fin.history.push(entry);
+  if (fin.history.length > 100) fin.history.shift();
+  return { ok: true, entry };
+}
+
+// ---------------------------------------------------------------- deterministic calendar processing
+export function ensureCalendar(state) {
+  if (!state.calendar) {
+    state.calendar = {
+      lastDayKey: dayKey(state.clock),
+      lastMonthKey: monthKey(state.clock),
+      lastYearKey: yearKey(state.clock),
+      lastSalaryClock: state.clock,
+      lastRentClock: state.clock,
+      lastBusinessClock: state.clock,
+      birthdayMonth: 3,
+      birthdayDay: 4
+    };
+  }
+}
+
+function processCalendarTransitions(state) {
+  ensureCalendar(state);
+  const curDay = dayKey(state.clock);
+  const curMonth = monthKey(state.clock);
+  const curYear = yearKey(state.clock);
+  const cal = state.calendar;
+
+  if (cal.lastDayKey !== curDay) {
+    cal.lastDayKey = curDay;
+    if (state.daily.day !== curDay) state.daily = { day: curDay, counts: {} };
+    if (state.finances) transact(state, { amount: -2, category: 'living', desc: 'Daily living baseline expenses' });
+  }
+
+  if (cal.lastMonthKey !== curMonth) {
+    cal.lastMonthKey = curMonth;
+    if (state.housing?.rentals) {
+      for (const propId of state.housing.rentals) {
+        const prop = D.PROPERTIES[propId];
+        if (prop?.rentCost) transact(state, { amount: -prop.rentCost * 4, category: 'housing', desc: `Monthly rent for ${prop.name}` });
+      }
+    }
+    if (state.housing?.owned) {
+      for (const propId of state.housing.owned) {
+        const prop = D.PROPERTIES[propId];
+        if (prop?.maintenance) transact(state, { amount: -prop.maintenance * 4, category: 'housing', desc: `Monthly maintenance for ${prop.name}` });
+      }
+    }
+  }
+
+  if (cal.lastYearKey !== curYear) {
+    cal.lastYearKey = curYear;
+    state.character.age = (state.character.age || 24) + 1;
+    const stage = D.getLifeStage(state.character.age);
+    NOTES.push(`Happy Birthday! You turned ${state.character.age} years old (${stage.name}).`);
+    if (state.chronicle) {
+      recordChronicle(state, {
+        category: 'milestone',
+        title: `Turned ${state.character.age}`,
+        desc: `Celebrated birthday in ${curYear}. Current life stage: ${stage.name}.`
+      });
+    }
+    if (state.family?.children) {
+      for (const child of state.family.children) {
+        child.age = (child.age || 0) + 1;
+        NOTES.push(`${child.name} celebrated a birthday and is now ${child.age} years old.`);
+      }
+    }
+  }
+
+  if (state.career?.currentJob) {
+    const job = D.JOBS[state.career.currentJob];
+    if (job) {
+      if (!cal.lastSalaryClock) cal.lastSalaryClock = state.clock;
+      const salaryInterval = 7 * 24 * 60;
+      while (state.clock - cal.lastSalaryClock >= salaryInterval) {
+        cal.lastSalaryClock += salaryInterval;
+        transact(state, { amount: job.salary, category: 'salary', desc: `Weekly salary from ${job.company} (${job.title})` });
+        NOTES.push(`Received weekly salary: +${job.salary} money from ${job.company}.`);
+      }
+    }
+  }
+
+  if (state.business?.owned) {
+    if (!cal.lastBusinessClock) cal.lastBusinessClock = state.clock;
+    const bizInterval = 7 * 24 * 60;
+    while (state.clock - cal.lastBusinessClock >= bizInterval) {
+      cal.lastBusinessClock += bizInterval;
+      for (const biz of state.business.owned) {
+        const def = D.BUSINESS_TYPES[biz.type];
+        if (def) {
+          const rev = Math.round(def.baseWeeklyRevenue * (1 + (biz.upgradeLevel || 0) * 0.25) * ((biz.reputation || 50) / 50));
+          const exp = Math.round(def.baseWeeklyExpenses * (1 + (biz.staffCount || 0) * 0.4));
+          const net = rev - exp;
+          biz.totalRevenue = (biz.totalRevenue || 0) + rev;
+          biz.totalExpenses = (biz.totalExpenses || 0) + exp;
+          transact(state, { amount: net, category: 'business', desc: `Weekly net income from ${biz.name}` });
+          NOTES.push(`Business cycle (${biz.name}): Revenue +${rev}, Expenses -${exp}, Net ${net >= 0 ? '+' : ''}${net}.`);
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------- chronicle & milestone helper
+export function ensureChronicle(state) {
+  if (!state.chronicle) state.chronicle = [];
+}
+export function recordChronicle(state, milestone) {
+  ensureChronicle(state);
+  const entry = {
+    id: nextId(state),
+    clock: state.clock,
+    date: formatDateOnly(state.clock),
+    year: dateParts(state.clock).year,
+    category: milestone.category || 'milestone',
+    title: milestone.title,
+    desc: milestone.desc
+  };
+  state.chronicle.push(entry);
+  return entry;
+}
+
+// ---------------------------------------------------------------- career & employment engine
+export function ensureCareer(state) {
+  if (!state.career) {
+    state.career = {
+      currentJob: null,
+      performance: 70,
+      experienceDays: 0,
+      shiftsWorked: 0,
+      history: [],
+      appliedJobs: []
+    };
+  }
+}
+
+export function checkJobPrerequisites(state, jobId) {
+  const job = D.JOBS[jobId];
+  if (!job) return { ok: false, error: 'Job not found in database.' };
+  const req = job.requirements;
+  if (!req) return { ok: true };
+
+  if (req.qualification) {
+    state.education = state.education || { enrolled: [], completed: [], qualifications: [] };
+    if (!state.education.qualifications.includes(req.qualification)) {
+      const prog = D.EDUCATION_PROGRAMS[req.qualification];
+      return { ok: false, error: `Requires qualification: ${prog ? prog.name : req.qualification}.` };
+    }
+  }
+
+  if (req.attributes) {
+    for (const [attr, minVal] of Object.entries(req.attributes)) {
+      if ((state.character.attributes[attr] || 0) < minVal) {
+        return { ok: false, error: `Requires ${attrName(attr)} at level ${minVal} or higher (current: ${state.character.attributes[attr] || 0}).` };
+      }
+    }
+  }
+
+  if (req.skills) {
+    for (const [sk, minVal] of Object.entries(req.skills)) {
+      const curLv = state.character.skills[sk] ? state.character.skills[sk].level : 0;
+      if (curLv < minVal) {
+        return { ok: false, error: `Requires ${skillName(sk)} at level ${minVal} or higher (current: ${curLv}).` };
+      }
+    }
+  }
+
+  if (req.expDays && (state.career?.experienceDays || 0) < req.expDays) {
+    return { ok: false, error: `Requires at least ${req.expDays} days of career experience (current: ${state.career?.experienceDays || 0}).` };
+  }
+
+  return { ok: true };
+}
+
+function doJobApply(state, jobId) {
+  ensureCareer(state);
+  const job = D.JOBS[jobId];
+  if (!job) return { error: 'Unknown job vacancy.' };
+  if (state.career.currentJob === jobId) return { error: `You are already employed as ${job.title} at ${job.company}.` };
+
+  const check = checkJobPrerequisites(state, jobId);
+  if (!check.ok) return { error: check.error };
+
+  state.career.history.push({
+    action: 'hired', jobId, title: job.title, company: job.company, clock: state.clock, date: formatDateOnly(state.clock)
+  });
+  state.career.currentJob = jobId;
+  state.career.performance = 75;
+
+  recordChronicle(state, {
+    category: 'career',
+    title: `Hired as ${job.title}`,
+    desc: `Joined ${job.company} as ${job.title} in the ${job.industry} sector with a starting salary of ${job.salary} money/week.`
+  });
+  NOTES.push(`Congratulations! You were hired as ${job.title} at ${job.company}.`);
+
+  return {
+    title: `Employment Offer: ${job.title}`,
+    narrative: [
+      `Your credentials and portfolio made an immediate impression at ${job.company}.`,
+      `You are officially hired as ${job.title}! Weekly salary: ${job.salary} money.`
+    ]
+  };
+}
+
+function doJobWork(state) {
+  ensureCareer(state);
+  if (!state.career.currentJob) return { error: 'You are not currently employed. Browse available jobs under Career.' };
+  const job = D.JOBS[state.career.currentJob];
+  if (!job) return { error: 'Current job definition not found.' };
+
+  if (state.needs.energy < 25) return { error: 'You are too exhausted to complete a full work shift.' };
+
+  state.needs.energy = Math.max(0, state.needs.energy - 24);
+  state.needs.satiety = Math.max(0, state.needs.satiety - 12);
+  state.career.shiftsWorked = (state.career.shiftsWorked || 0) + 1;
+  state.career.experienceDays = (state.career.experienceDays || 0) + 0.5;
+
+  const perfDelta = state.needs.energy >= 40 ? 3 : -2;
+  state.career.performance = clamp(state.career.performance + perfDelta, 20, 100);
+
+  grantExp(state, 15);
+  if (job.industry === 'Technology') grantSkillExp(state, 'programming', 12);
+  else if (job.industry === 'Creative') grantSkillExp(state, 'design', 12);
+  else if (job.industry === 'Finance') grantSkillExp(state, 'research', 12);
+  else if (job.industry === 'Corporate') grantSkillExp(state, 'negotiation', 12);
+  else if (job.industry === 'Hospitality') grantSkillExp(state, 'cooking', 12);
+  else grantSkillExp(state, 'conversation', 10);
+
+  advance(state, 240);
+
+  return {
+    title: `Work Shift: ${job.title}`,
+    narrative: [
+      `You completed a dedicated work shift at ${job.company}.`,
+      `Job performance is currently rated at ${state.career.performance}/100.`
+    ]
+  };
+}
+
+function doJobPromote(state) {
+  ensureCareer(state);
+  if (!state.career.currentJob) return { error: 'You are not currently employed.' };
+  const current = D.JOBS[state.career.currentJob];
+  if (!current?.nextJob) return { error: 'No further promotion path available for this career track.' };
+  const next = D.JOBS[current.nextJob];
+  if (!next) return { error: 'Promotion tier not found.' };
+
+  if (state.career.performance < 80) return { error: `Promotion requires a performance rating of at least 80/100 (current: ${state.career.performance}).` };
+  const check = checkJobPrerequisites(state, next.id);
+  if (!check.ok) return { error: `Cannot promote yet: ${check.error}` };
+
+  state.career.currentJob = next.id;
+  state.career.performance = 75;
+  state.career.history.push({
+    action: 'promoted', jobId: next.id, title: next.title, company: next.company, clock: state.clock, date: formatDateOnly(state.clock)
+  });
+
+  recordChronicle(state, {
+    category: 'career',
+    title: `Promoted to ${next.title}`,
+    desc: `Earned a major career promotion at ${next.company} to ${next.title}. New salary: ${next.salary} money/week.`
+  });
+  NOTES.push(`Promotion achieved! You are now ${next.title} at ${next.company}.`);
+
+  return {
+    title: `Promotion: ${next.title}`,
+    narrative: [
+      `Your sustained performance and qualifications earned executive recognition.`,
+      `You have been promoted to ${next.title}! New salary: ${next.salary} money/week.`
+    ]
+  };
+}
+
+function doJobResign(state) {
+  ensureCareer(state);
+  if (!state.career.currentJob) return { error: 'You are not currently employed.' };
+  const job = D.JOBS[state.career.currentJob];
+  state.career.history.push({
+    action: 'resigned', jobId: state.career.currentJob, title: job ? job.title : 'Employed', company: job ? job.company : '', clock: state.clock, date: formatDateOnly(state.clock)
+  });
+  state.career.currentJob = null;
+  state.career.performance = 70;
+
+  NOTES.push(`You resigned from your job at ${job ? job.company : 'the workplace'}.`);
+  return {
+    title: 'Resignation Submitted',
+    narrative: [`You tendered your formal resignation. You are now free to pursue new career paths or independent ventures.`]
+  };
+}
+
+// ---------------------------------------------------------------- education & professional training engine
+export function ensureEducation(state) {
+  if (!state.education) {
+    state.education = {
+      enrolled: [],
+      completed: [],
+      qualifications: []
+    };
+  }
+}
+
+function doEduEnroll(state, progId) {
+  ensureEducation(state);
+  const prog = D.EDUCATION_PROGRAMS[progId];
+  if (!prog) return { error: 'Education program not found.' };
+
+  if (state.education.qualifications.includes(prog.qualification)) {
+    return { error: `You have already earned the qualification from ${prog.name}.` };
+  }
+  if (state.education.enrolled.some((e) => e.id === progId)) {
+    return { error: `You are already enrolled in ${prog.name}.` };
+  }
+
+  if (prog.requirements?.attributes) {
+    for (const [attr, minVal] of Object.entries(prog.requirements.attributes)) {
+      if ((state.character.attributes[attr] || 0) < minVal) {
+        return { error: `Enrollment requires ${attrName(attr)} at level ${minVal} or higher.` };
+      }
+    }
+  }
+
+  if (state.money < prog.cost) return { error: `Tuition requires ${prog.cost} money (you have ${state.money}).` };
+  transact(state, { amount: -prog.cost, category: 'education', desc: `Tuition for ${prog.name}` });
+
+  state.education.enrolled.push({
+    id: progId, hoursCompleted: 0, totalHours: prog.totalHoursNeeded
+  });
+
+  NOTES.push(`Enrolled in ${prog.name}. Paid ${prog.cost} money tuition.`);
+  return {
+    title: `Enrolled: ${prog.name}`,
+    narrative: [
+      `Your registration at ${prog.institution} is confirmed.`,
+      `Commit regular study sessions to complete the curriculum and earn your qualification.`
+    ]
+  };
+}
+
+function doEduStudy(state, progId) {
+  ensureEducation(state);
+  const enrollment = state.education.enrolled.find((e) => e.id === progId);
+  if (!enrollment) return { error: `You are not enrolled in this program.` };
+  const prog = D.EDUCATION_PROGRAMS[progId];
+  if (!prog) return { error: 'Program definition not found.' };
+
+  if (state.needs.energy < 16) return { error: 'You are too tired to concentrate on academic coursework.' };
+
+  state.needs.energy = Math.max(0, state.needs.energy - 14);
+  state.needs.satiety = Math.max(0, state.needs.satiety - 6);
+  enrollment.hoursCompleted += 2;
+
+  grantExp(state, 12);
+  grantSkillExp(state, 'research', 12);
+  advance(state, 120);
+
+  let graduated = false;
+  if (enrollment.hoursCompleted >= enrollment.totalHours) {
+    graduated = true;
+    state.education.enrolled = state.education.enrolled.filter((e) => e.id !== progId);
+    state.education.completed.push({ id: progId, date: formatDateOnly(state.clock) });
+    if (!state.education.qualifications.includes(prog.qualification)) {
+      state.education.qualifications.push(prog.qualification);
+    }
+    if (prog.rewards) {
+      if (prog.rewards.skill && prog.rewards.skillExp) grantSkillExp(state, prog.rewards.skill, prog.rewards.skillExp);
+      if (prog.rewards.exp) grantExp(state, prog.rewards.exp);
+      if (prog.rewards.attr && prog.rewards.attrBonus) raiseAttribute(state, prog.rewards.attr, prog.rewards.attrBonus);
+    }
+    recordChronicle(state, {
+      category: 'education',
+      title: `Graduated: ${prog.name}`,
+      desc: `Completed all curriculum requirements at ${prog.institution} and earned the ${prog.qualification} credential.`
+    });
+    NOTES.push(`Graduation! You earned ${prog.name} from ${prog.institution}!`);
+  }
+
+  return {
+    title: graduated ? `Graduation: ${prog.name}` : `Study Session: ${prog.name}`,
+    narrative: graduated
+      ? [`You submitted your final capstone examination with flying colors!`, `You were awarded the official diploma for ${prog.name}.`]
+      : [`You completed an intensive 2-hour lecture session.`, `Program progress: ${enrollment.hoursCompleted}/${enrollment.totalHours} hours completed.`]
+  };
+}
+
+// ---------------------------------------------------------------- housing, property ownership & relocation
+export function ensureHousing(state) {
+  if (!state.housing) {
+    state.housing = {
+      primaryHome: 'rented_room',
+      rentals: ['rented_room'],
+      owned: []
+    };
+  }
+}
+
+function doPropertyRent(state, propId) {
+  ensureHousing(state);
+  const prop = D.PROPERTIES[propId];
+  if (!prop) return { error: 'Property not found.' };
+  if (state.housing.rentals.includes(propId)) return { error: `You are already renting ${prop.name}.` };
+  if (state.housing.owned.includes(propId)) return { error: 'You already own this property.' };
+
+  const firstMonthRent = prop.rentCost * 4;
+  if (state.money < firstMonthRent) return { error: `Renting ${prop.name} requires first month's deposit of ${firstMonthRent} money (you have ${state.money}).` };
+
+  transact(state, { amount: -firstMonthRent, category: 'housing', desc: `First month rental lease for ${prop.name}` });
+  state.housing.rentals.push(propId);
+  NOTES.push(`Signed rental lease for ${prop.name}. Paid deposit: ${firstMonthRent} money.`);
+
+  return {
+    title: `Lease Signed: ${prop.name}`,
+    narrative: [
+      `You finalized the rental contract for ${prop.name} at ${D.LOCATIONS[prop.location]?.name || prop.location}.`,
+      `Weekly rent is ${prop.rentCost} money, billed monthly.`
+    ]
+  };
+}
+
+function doPropertyBuy(state, propId) {
+  ensureHousing(state);
+  const prop = D.PROPERTIES[propId];
+  if (!prop) return { error: 'Property not found.' };
+  if (!prop.canBuy) return { error: `${prop.name} cannot be purchased.` };
+  if (state.housing.owned.includes(propId)) return { error: 'You already own this property.' };
+
+  if (state.money < prop.buyPrice) return { error: `Purchasing ${prop.name} requires ${prop.buyPrice} money (you have ${state.money}).` };
+
+  transact(state, { amount: -prop.buyPrice, category: 'property_purchase', desc: `Deed purchase of ${prop.name}` });
+  state.housing.owned.push(propId);
+  state.housing.rentals = state.housing.rentals.filter((id) => id !== propId);
+
+  recordChronicle(state, {
+    category: 'property',
+    title: `Purchased ${prop.name}`,
+    desc: `Acquired full ownership deed of ${prop.name} for ${prop.buyPrice} money.`
+  });
+  NOTES.push(`Property acquired! You now hold the deed to ${prop.name}.`);
+
+  return {
+    title: `Property Deed Acquired: ${prop.name}`,
+    narrative: [`The deed and title transfer are finalized. You are the proud owner of ${prop.name}!`]
+  };
+}
+
+function doPropertyMove(state, propId) {
+  ensureHousing(state);
+  const prop = D.PROPERTIES[propId];
+  if (!prop) return { error: 'Property not found.' };
+  if (prop.type !== 'residential') return { error: `${prop.name} is a commercial property and cannot be your primary residence.` };
+  if (!state.housing.owned.includes(propId) && !state.housing.rentals.includes(propId)) {
+    return { error: `You do not rent or own ${prop.name}. Lease or purchase it first.` };
+  }
+  if (state.housing.primaryHome === propId) return { error: 'This is already your primary residence.' };
+
+  if (state.money < 20) return { error: 'Moving van and relocation services cost 20 money.' };
+  transact(state, { amount: -20, category: 'relocation', desc: `Moving relocation services to ${prop.name}` });
+
+  state.housing.primaryHome = propId;
+  state.location = prop.location;
+
+  recordChronicle(state, {
+    category: 'relocation',
+    title: `Relocated to ${prop.name}`,
+    desc: `Moved primary residence to ${prop.name} in ${D.LOCATIONS[prop.location]?.name || prop.location}.`
+  });
+  NOTES.push(`You unpacked your belongings and settled into your new residence: ${prop.name}.`);
+  advance(state, 180);
+
+  return {
+    title: `Moved to ${prop.name}`,
+    narrative: [`The moving van delivered your boxes to ${prop.name}. Your primary home is now at ${D.LOCATIONS[prop.location]?.name || prop.location}.`]
+  };
+}
+
+// ---------------------------------------------------------------- business ownership & management
+export function ensureBusiness(state) {
+  if (!state.business) {
+    state.business = { owned: [] };
+  }
+}
+
+function doBusinessFound(state, typeId, customName) {
+  ensureBusiness(state);
+  const def = D.BUSINESS_TYPES[typeId];
+  if (!def) return { error: 'Business venture type not found.' };
+
+  const name = String(customName || def.name).trim();
+  if (state.money < def.startupCost) return { error: `Starting ${name} requires ${def.startupCost} initial capital (you have ${state.money}).` };
+
+  transact(state, { amount: -def.startupCost, category: 'business_startup', desc: `Registration and capital for ${name}` });
+
+  const newBiz = {
+    id: nextId(state),
+    type: typeId,
+    name,
+    establishedClock: state.clock,
+    upgradeLevel: 0,
+    staffCount: 1,
+    reputation: 50,
+    totalRevenue: 0,
+    totalExpenses: 0
+  };
+  state.business.owned.push(newBiz);
+
+  recordChronicle(state, {
+    category: 'business',
+    title: `Founded ${name}`,
+    desc: `Officially incorporated ${name} in the ${def.industry} industry with ${def.startupCost} capital.`
+  });
+  NOTES.push(`Enterprise launched! You registered and opened ${name}.`);
+
+  return {
+    title: `Enterprise Founded: ${name}`,
+    narrative: [`${name} is open for business. Weekly revenue and operating expenses will be processed automatically.`]
+  };
+}
+
+function doBusinessManage(state, bizId, actionType) {
+  ensureBusiness(state);
+  const biz = state.business.owned.find((b) => b.id === Number(bizId));
+  if (!biz) return { error: 'Business entity not found.' };
+
+  if (actionType === 'hire') {
+    const hiringCost = 40;
+    if (state.money < hiringCost) return { error: `Recruiting an employee costs ${hiringCost} money.` };
+    transact(state, { amount: -hiringCost, category: 'business', desc: `Recruitment fee for ${biz.name}` });
+    biz.staffCount = (biz.staffCount || 1) + 1;
+    biz.reputation = clamp((biz.reputation || 50) + 5, 0, 100);
+    grantSkillExp(state, 'negotiation', 10);
+    NOTES.push(`Hired an additional staff member for ${biz.name} (staff: ${biz.staffCount}).`);
+    return {
+      title: `Staff Recruited: ${biz.name}`,
+      narrative: [`You hired an energetic new employee. Operational capacity and service quality improved.`]
+    };
+  } else if (actionType === 'upgrade') {
+    const upgradeCost = 150 * ((biz.upgradeLevel || 0) + 1);
+    if (state.money < upgradeCost) return { error: `Upgrading facilities costs ${upgradeCost} money.` };
+    transact(state, { amount: -upgradeCost, category: 'business', desc: `Facility expansion for ${biz.name}` });
+    biz.upgradeLevel = (biz.upgradeLevel || 0) + 1;
+    biz.reputation = clamp((biz.reputation || 50) + 10, 0, 100);
+    grantSkillExp(state, 'negotiation', 15);
+    grantExp(state, 20);
+    NOTES.push(`Facilities upgraded for ${biz.name} (Tier ${biz.upgradeLevel}).`);
+    return {
+      title: `Facility Upgraded: ${biz.name}`,
+      narrative: [`Modern equipment and renovated premises were installed. Revenue potential has increased!`]
+    };
+  }
+  return { error: 'Unknown business management action.' };
+}
+
+// ---------------------------------------------------------------- social relationships, romance, marriage & family
+export function ensureRelationships(state) {
+  if (!state.relationships) {
+    state.relationships = {};
+  }
+  for (const npcId of Object.keys(D.NPCS)) {
+    if (!state.relationships[npcId]) {
+      const trust = state.relations[npcId] || 0;
+      state.relationships[npcId] = {
+        affinity: trust >= 10 ? 20 : 0,
+        trust: trust,
+        status: trust >= 30 ? 'friend' : trust >= 10 ? 'acquaintance' : 'stranger',
+        romanceStatus: 'none',
+        history: []
+      };
+    }
+  }
+}
+
+export function ensureFamily(state) {
+  if (!state.family) {
+    state.family = {
+      spouse: null,
+      children: [],
+      tree: []
+    };
+  }
+}
+
+function doSocialInteract(state, npcId, type) {
+  ensureRelationships(state);
+  const npc = D.NPCS[npcId];
+  if (!npc) return { error: 'Individual not found.' };
+  const rel = state.relationships[npcId];
+
+  if (state.needs.energy < 10) return { error: 'You are too exhausted for social engagement.' };
+
+  state.needs.energy = Math.max(0, state.needs.energy - 8);
+  advance(state, 60);
+
+  if (type === 'hangout') {
+    rel.affinity = clamp(rel.affinity + 6, 0, 100);
+    rel.trust = clamp(rel.trust + 4, -100, 100);
+    state.relations[npcId] = rel.trust;
+    if (rel.affinity >= 40 && rel.status === 'acquaintance') rel.status = 'friend';
+    if (rel.affinity >= 70 && rel.status === 'friend') rel.status = 'close_friend';
+    grantSkillExp(state, 'conversation', 10);
+    grantExp(state, 8);
+    NOTES.push(`Spent quality time with ${npc.name}. Affinity and trust grew.`);
+    return {
+      title: `Social Outing with ${npc.name}`,
+      narrative: [
+        `You and ${npc.name} met up for coffee and an engaging conversation about work and life.`,
+        `Relationship status with ${npc.name}: ${rel.status} (Affinity: ${rel.affinity}/100, Trust: ${rel.trust}).`
+      ]
+    };
+  } else if (type === 'gift') {
+    const giftCost = 25;
+    if (state.money < giftCost) return { error: `Purchasing a thoughtful gift costs ${giftCost} money.` };
+    transact(state, { amount: -giftCost, category: 'gift', desc: `Gift for ${npc.name}` });
+    rel.affinity = clamp(rel.affinity + 12, 0, 100);
+    rel.trust = clamp(rel.trust + 5, -100, 100);
+    state.relations[npcId] = rel.trust;
+    NOTES.push(`Gave a thoughtful gift to ${npc.name}. They were delighted!`);
+    return {
+      title: `Gift Presented to ${npc.name}`,
+      narrative: [
+        `You surprised ${npc.name} with a carefully chosen present.`,
+        `They expressed heartfelt appreciation for your generosity.`
+      ]
+    };
+  }
+  return { error: 'Unknown social interaction type.' };
+}
+
+function doRomanceAction(state, npcId, actionType) {
+  ensureRelationships(state);
+  ensureFamily(state);
+  const npc = D.NPCS[npcId];
+  if (!npc) return { error: 'Individual not found.' };
+  const rel = state.relationships[npcId];
+
+  if (actionType === 'date') {
+    if (rel.affinity < 30) return { error: `${npc.name} does not know you well enough to go on a date (Affinity ${rel.affinity}/100, need 30).` };
+    const dateCost = 35;
+    if (state.money < dateCost) return { error: `An evening dinner date costs ${dateCost} money.` };
+    transact(state, { amount: -dateCost, category: 'entertainment', desc: `Dinner date with ${npc.name}` });
+    rel.affinity = clamp(rel.affinity + 10, 0, 100);
+    rel.trust = clamp(rel.trust + 6, -100, 100);
+    state.relations[npcId] = rel.trust;
+    if (rel.romanceStatus === 'none') rel.romanceStatus = 'dating';
+    state.needs.energy = Math.max(0, state.needs.energy - 10);
+    advance(state, 120);
+
+    NOTES.push(`Romantic date with ${npc.name}. Relationship blossomed.`);
+    return {
+      title: `Romantic Evening with ${npc.name}`,
+      narrative: [
+        `You shared a wonderful dinner with ${npc.name} at a candlelit waterfront table.`,
+        `Sparks flew over dessert as you discussed shared dreams and personal passions.`
+      ]
+    };
+  } else if (actionType === 'partner') {
+    if (rel.affinity < 60) return { error: `Deep romantic partnership requires at least 60 Affinity (currently ${rel.affinity}/100).` };
+    if (rel.romanceStatus === 'partner' || rel.romanceStatus === 'spouse') return { error: `You are already official partners with ${npc.name}.` };
+    rel.romanceStatus = 'partner';
+    rel.affinity = clamp(rel.affinity + 15, 0, 100);
+    recordChronicle(state, {
+      category: 'romance',
+      title: `Official Partnership with ${npc.name}`,
+      desc: `Deepened bond with ${npc.name} into an official loving partnership.`
+    });
+    NOTES.push(`You and ${npc.name} are now officially romantic partners.`);
+    return {
+      title: `Partnership: ${npc.name}`,
+      narrative: [
+        `You had an honest, heartfelt talk with ${npc.name} about your mutual feelings.`,
+        `Both of you agreed to commit to an official romantic partnership!`
+      ]
+    };
+  } else if (actionType === 'propose') {
+    if (state.family.spouse) return { error: `You are already married to ${state.family.spouse.name}.` };
+    if (rel.romanceStatus !== 'partner') return { error: `You must be in an established partnership with ${npc.name} before proposing marriage.` };
+    if (rel.affinity < 85 || rel.trust < 50) return { error: `A marriage proposal requires at least 85 Affinity and 50 Trust (have Affinity ${rel.affinity}, Trust ${rel.trust}).` };
+
+    const ringCost = 300;
+    if (state.money < ringCost) return { error: `An engagement ring costs ${ringCost} money.` };
+    transact(state, { amount: -ringCost, category: 'ring', desc: `Engagement ring for ${npc.name}` });
+
+    rel.romanceStatus = 'spouse';
+    state.family.spouse = {
+      npcId,
+      name: npc.name,
+      weddingDate: formatDateOnly(state.clock),
+      clock: state.clock
+    };
+    state.family.tree.push({ role: 'Spouse', name: npc.name, since: formatDateOnly(state.clock) });
+
+    recordChronicle(state, {
+      category: 'marriage',
+      title: `Married ${npc.name}`,
+      desc: `Exchanged wedding vows with ${npc.name} in a beautiful ceremony. Began married family life together.`
+    });
+    NOTES.push(`Wedding bells! You are now happily married to ${npc.name}!`);
+
+    return {
+      title: `Wedding: Married to ${npc.name}`,
+      narrative: [
+        `You proposed with an elegant ring, and ${npc.name} said YES with joyful tears!`,
+        `You exchanged vows in a celebratory ceremony witnessed by friends and colleagues.`
+      ]
+    };
+  } else if (actionType === 'breakup') {
+    if (rel.romanceStatus === 'none') return { error: `You are not in a romantic relationship with ${npc.name}.` };
+    const wasSpouse = rel.romanceStatus === 'spouse';
+    rel.romanceStatus = 'ex';
+    rel.affinity = clamp(rel.affinity - 40, 0, 100);
+    rel.trust = clamp(rel.trust - 25, -100, 100);
+    state.relations[npcId] = rel.trust;
+    if (wasSpouse && state.family.spouse?.npcId === npcId) {
+      state.family.spouse = null;
+    }
+    NOTES.push(`Romantic relationship with ${npc.name} ended.`);
+    return {
+      title: `Separation: ${npc.name}`,
+      narrative: [`You and ${npc.name} parted ways romantically, leaving behind memories of your time together.`]
+    };
+  }
+  return { error: 'Unknown romance action.' };
+}
+
+function doFamilyAction(state, actionType, childName) {
+  ensureFamily(state);
+  ensureHousing(state);
+  if (actionType === 'have_child') {
+    if (!state.family.spouse) return { error: 'Starting a family requires a married spouse.' };
+    const prop = D.PROPERTIES[state.housing.primaryHome];
+    if (prop && prop.maxOccupants <= 1 + state.family.children.length) {
+      return { error: `Your current residence (${prop.name}) does not have enough rooms for a child. Move to a larger apartment or house.` };
+    }
+    const name = String(childName || 'Pithe Jr').trim();
+    const newChild = {
+      id: nextId(state),
+      name,
+      birthClock: state.clock,
+      birthDate: formatDateOnly(state.clock),
+      birthYear: dateParts(state.clock).year,
+      age: 0,
+      relationshipScore: 80
+    };
+    state.family.children.push(newChild);
+    state.family.tree.push({ role: 'Child', name, birthYear: newChild.birthYear });
+
+    recordChronicle(state, {
+      category: 'family',
+      title: `Welcomed Child: ${name}`,
+      desc: `Celebrated the joyful birth and arrival of your child, ${name}, into the family household.`
+    });
+    NOTES.push(`Joyful news! Welcomed ${name} into the family!`);
+
+    return {
+      title: `Child Welcomed: ${name}`,
+      narrative: [
+        `A healthy, beautiful baby was born to your family!`,
+        `Pithe and ${state.family.spouse.name} welcomed ${name} with overwhelming love and joy.`
+      ]
+    };
+  } else if (actionType === 'parenting') {
+    if (!state.family.children.length) return { error: 'You do not have any children to care for.' };
+    if (state.needs.energy < 15) return { error: 'You are too tired for active parenting duties right now.' };
+
+    state.needs.energy = Math.max(0, state.needs.energy - 12);
+    state.needs.satiety = Math.max(0, state.needs.satiety - 6);
+    for (const ch of state.family.children) {
+      ch.relationshipScore = clamp((ch.relationshipScore || 80) + 5, 0, 100);
+    }
+    grantSkillExp(state, 'cooking', 8);
+    grantExp(state, 12);
+    advance(state, 120);
+
+    NOTES.push('Spent heartwarming family time caring for your children.');
+    return {
+      title: 'Family Time & Parenting',
+      narrative: [
+        `You read bedtime stories, cooked nutritious meals, and helped your children with homework.`,
+        `The home filled with laughter and mutual affection.`
+      ]
+    };
+  }
+  return { error: 'Unknown family action.' };
 }
 
 // ---------------------------------------------------------------- activities
@@ -675,6 +1542,20 @@ export function execute(state, action, opts = {}) {
     case 'use': res = doUse(state, action.item); break;
     case 'journal': res = doJournal(state, action); break;
     case 'tracker_reward': res = doTrackerReward(state, action); break;
+    case 'job_apply': res = doJobApply(state, action.id); break;
+    case 'job_work': res = doJobWork(state); break;
+    case 'job_promote': res = doJobPromote(state); break;
+    case 'job_resign': res = doJobResign(state); break;
+    case 'edu_enroll': res = doEduEnroll(state, action.id); break;
+    case 'edu_study': res = doEduStudy(state, action.id); break;
+    case 'property_rent': res = doPropertyRent(state, action.id); break;
+    case 'property_buy': res = doPropertyBuy(state, action.id); break;
+    case 'property_move': res = doPropertyMove(state, action.id); break;
+    case 'business_found': res = doBusinessFound(state, action.id, action.name); break;
+    case 'business_manage': res = doBusinessManage(state, action.id, action.manageType); break;
+    case 'social_interact': res = doSocialInteract(state, action.npc, action.interactType); break;
+    case 'romance_action': res = doRomanceAction(state, action.npc, action.romanceType); break;
+    case 'family_action': res = doFamilyAction(state, action.familyType, action.childName); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
