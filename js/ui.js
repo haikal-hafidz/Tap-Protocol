@@ -577,14 +577,57 @@ export function createApp(root, deps) {
         <small>In progress. Deadline: ${esc(R.formatClock(st.stageDeadline))}</small></div></li>`;
     }).join('');
 
-    // Active emergent events at this location
-    const activeEvents = (s.worldEvents?.active || []).filter((e) => e.location === s.location);
+    // Active emergent events at this location (Phase 3 & Phase 7)
+    const activeEvents = [
+      ...(s.worldEvents?.active || []).filter((e) => e.location === s.location),
+      ...((s.livingUniverseSim?.activeEvents || []).filter((e) => e.location === s.location).map((e) => ({
+        ...e,
+        isPhase7: true
+      })))
+    ];
     const eventsHtml = activeEvents.length
       ? activeEvents.map((ev) => `<li class="action"><div class="action-main"><strong>${esc(ev.name)}</strong> <span class="tag good">Live Event</span>
           <p>${esc(ev.desc)}</p>
           <small>Ends at ${esc(R.formatClock(ev.endClock))}</small></div>
-          ${ev.playerParticipated ? '<span class="tag">Attended</span>' : `<button class="btn primary" data-action="do" data-kind="event_participate" data-id="${ev.id}">${esc(ev.playerOption?.label || 'Participate')}</button>`}</li>`).join('')
+          ${ev.playerParticipated ? '<span class="tag">Attended</span>' : `<button class="btn primary" data-action="do" data-kind="${ev.isPhase7 ? 'phase7_event_participate' : 'event_participate'}" data-id="${ev.id}">${esc(ev.playerOption?.label || 'Participate')}</button>`}</li>`).join('')
       : '';
+
+    // District & Living Universe Conditions
+    const distId = R.locationDistrict(s.location);
+    const district = s.districts && distId ? s.districts[distId] : null;
+    let districtHtml = '';
+    if (district) {
+      const activeProj = Object.values(s.institutions?.projects || {}).filter((p) => p.location === s.location && !p.completed);
+      const activeBiz = Object.values(s.economy?.businesses || {}).filter((b) => b.location === s.location);
+
+      const projsHtml = activeProj.map((p) => {
+        const def = D.COMMUNITY_PROJECTS[p.id];
+        return `<div class="action"><div class="action-main"><strong>${esc(p.name)}</strong> <span class="tag">${p.progress}/${p.targetProgress}</span>
+          <p>${esc(def?.desc || '')}</p></div>
+          <button class="btn primary" data-action="do" data-kind="project_contribute" data-project-id="${p.id}">Contribute Effort</button></div>`;
+      }).join('');
+
+      const bizHtml = activeBiz.map((b) => {
+        return `<div class="action"><div class="action-main"><strong>${esc(b.name)}</strong> <span class="tag ${b.status === 'thriving' || b.status === 'expanding' ? 'good' : b.status === 'struggling' ? 'warn' : ''}">${esc(b.status)}</span>
+          <p>${esc(b.desc)} - Weekly Revenue: ${b.weeklyRevenue} money</p></div>
+          <button class="btn" data-action="do" data-kind="business_collaborate" data-biz-id="${b.id}">Collaborate</button></div>`;
+      }).join('');
+
+      districtHtml = `<section class="panel"><h2>District Context: ${esc(district.name)}</h2>
+        <div class="stats">
+          <div class="stat"><span>Environment</span><b>${district.environmentalQuality}/100</b></div>
+          <div class="stat"><span>Culture</span><b>${district.culturalActivity}/100</b></div>
+          <div class="stat"><span>Commerce</span><b>${district.commercialDev}/100</b></div>
+          <div class="stat"><span>Civic</span><b>${district.civicDev}/100</b></div>
+        </div>
+        <div class="row" style="margin-top:0.5rem">
+          <button class="btn" data-action="do" data-kind="district_action" data-district-id="${district.id}" data-action-type="clean_streets">Volunteer Sanitation (90m)</button>
+          <button class="btn" data-action="do" data-kind="district_action" data-district-id="${district.id}" data-action-type="support_culture">Cultural Patronage ($20)</button>
+        </div>
+        ${projsHtml ? `<h3>Civic Community Projects</h3><div class="actions">${projsHtml}</div>` : ''}
+        ${bizHtml ? `<h3>Local Neighborhood Enterprises</h3><div class="actions">${bizHtml}</div>` : ''}
+      </section>`;
+    }
 
     const where = Object.keys(D.NPCS).map((id) => {
       const at = R.npcLocation(id, s.clock);
@@ -598,6 +641,7 @@ export function createApp(root, deps) {
       ${talk}
       ${storiesHtml ? `<section class="panel"><h2>Local Developments & Storylines</h2><ul class="actions">${storiesHtml}</ul></section>` : ''}
       ${eventsHtml ? `<section class="panel"><h2>Happening Now at ${esc(loc.name)}</h2><ul class="actions">${eventsHtml}</ul></section>` : ''}
+      ${districtHtml}
       <section class="panel"><h2>People here</h2>${npcs ? `<ul class="actions">${npcs}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
       <section class="panel"><h2>Travel</h2><ul class="actions">${go}</ul></section>
       <section class="panel"><h2>Who is where</h2><ul class="plain">${where}</ul><p class="hint">The world only moves when you act. Time stops when you close the game.</p></section>`;
@@ -747,7 +791,20 @@ export function createApp(root, deps) {
         <button class="btn ${canAfford ? 'primary' : ''}" data-action="do" data-kind="business_found" data-id="${v.id}" ${canAfford ? '' : 'disabled'}>Found Business ($0)</button></li>`;
     }).join('');
 
+    // Local economy macroeconomic trends
+    const eco = s.economy || {};
+    const macroHtml = `<section class="panel"><h2>Metropolitan Economic Climate</h2>
+      <div class="stats">
+        <div class="stat"><span>Prosperity</span><b>${eco.prosperityIndex || 70}/100</b></div>
+        <div class="stat"><span>Cost Index</span><b>${((eco.priceMultiplier || 1.0) * 100).toFixed(0)}%</b></div>
+        <div class="stat"><span>Sector Demand</span><b>Tech ${eco.sectorDemand?.technology || 70}%</b></div>
+        <div class="stat"><span>Retail Demand</span><b>Retail ${eco.sectorDemand?.retail || 70}%</b></div>
+      </div>
+      <p class="hint">The local macroeconomic climate affects price inflation at Lantern Market, enterprise profitability, and hiring demand across districts.</p>
+    </section>`;
+
     return `<section class="panel"><h2>Real Estate & Residences</h2><ul class="actions">${propsList}</ul></section>
+      ${macroHtml}
       <section class="panel"><h2>Your Enterprises</h2>${bizList}</section>
       <section class="panel"><h2>Found a New Business</h2><ul class="actions">${ventures}</ul></section>`;
   }
@@ -839,10 +896,28 @@ export function createApp(root, deps) {
       </section>`;
     }).join('');
 
+    // Phase 7 Civic Initiatives & Public Projects overview in Organizations
+    const civicProjects = Object.values(s.institutions?.projects || {});
+    const civicProjectsHtml = civicProjects.length
+      ? `<section class="panel"><h2>Metropolitan Civic Projects & Initiatives</h2>
+          <p class="hint">Civic institutions and guilds lead sustainable community public works. Completed: ${s.institutions?.completedProjects?.length || 0}. Total Community Contributions: ${s.institutions?.totalContributions || 0}.</p>
+          <ul class="actions">${civicProjects.map((p) => {
+            const def = D.COMMUNITY_PROJECTS[p.id];
+            const isHere = s.location === p.location;
+            const canAfford = !def.costPerContribution || s.money >= def.costPerContribution;
+            const canEnergy = s.needs.energy >= def.energyPerContribution;
+            return `<li class="action"><div class="action-main"><strong>${esc(p.name)}</strong> <span class="tag ${p.completed ? 'good' : ''}">${p.completed ? 'Completed' : `${p.progress}/${p.targetProgress}`}</span>
+              <p>${esc(def?.desc || '')} Location: <strong>${esc(D.LOCATIONS[p.location]?.name || p.location)}</strong></p>
+              ${p.completed ? '' : `<small>Cost: ${def.costPerContribution || 0} money | Energy: ${def.energyPerContribution} | Skill: ${def.skill || 'general'}</small>`}</div>
+              ${p.completed ? '<span class="tag good">Finished</span>' : `<button class="btn ${isHere && canAfford && canEnergy ? 'primary' : ''}" data-action="do" data-kind="project_contribute" data-project-id="${p.id}" ${isHere && canAfford && canEnergy ? '' : 'disabled'}>Contribute</button>`}</li>`;
+          }).join('')}</ul></section>`
+      : '';
+
     return `<div class="cols">
       <section class="panel"><h2>Guilds, Collectives & Societies</h2>
         <p class="hint">Join civic associations and professional guilds to collaborate with like-minded residents, unlock unique privileges, and assume leadership roles.</p>
       </section></div>
+      ${civicProjectsHtml}
       ${orgCards}`;
   }
 
@@ -1014,7 +1089,7 @@ export function createApp(root, deps) {
   function readAction(el) {
     const d = el.dataset;
     const a = { kind: d.kind };
-    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId', 'storyId', 'choiceId', 'oralId', 'heirId', 'templateKey']) if (d[k] !== undefined) a[k] = d[k];
+    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId', 'storyId', 'choiceId', 'oralId', 'heirId', 'templateKey', 'districtId', 'actionType', 'projectId', 'bizId', 'collabType', 'eventId']) if (d[k] !== undefined) a[k] = d[k];
     return a;
   }
 

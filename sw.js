@@ -6,7 +6,7 @@
 // If any file fails to download, the install fails and the old version stays active and intact.
 // The new version waits until the player accepts the update prompt (or closes all tabs), then old caches are deleted.
 
-const CACHE_VERSION = '88cdeaefd9cd';
+const CACHE_VERSION = '69b3479efdbc';
 const CACHE_PREFIX = 'tap-protocol-';
 const CACHE = CACHE_PREFIX + CACHE_VERSION;
 
