@@ -134,6 +134,7 @@ export function createCharacter(o = {}) {
   ensureRelationships(state);
   ensureFamily(state);
   ensureChronicle(state);
+  ensureWorldMemory(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -170,6 +171,7 @@ export function migrateState(s) {
   ensureRelationships(s);
   ensureFamily(s);
   ensureChronicle(s);
+  ensureWorldMemory(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -306,6 +308,7 @@ function advance(state, minutes, opts = {}) {
   }
   ensureDay(state);
   checkDeadline(state);
+  processWorldSimulation(state);
   return state.stats.collapses > collapsesBefore;
 }
 
@@ -329,6 +332,14 @@ function checkDeadline(state) {
     q.status = 'failed'; q.outcome = 'late'; q.finishedAt = state.clock;
     addRel(state, 'dani', -10);
     NOTES.push('Quest failed: The Missing Menu. The deadline passed. Dani hired someone else.');
+    recordMemory(state, {
+      type: 'quest_failed',
+      title: 'The Missing Menu deadline expired',
+      entities: ['pithe', 'dani'],
+      location: 'cafe',
+      importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+      context: 'Pithe did not deliver the menu cards in time. Dani hired another writer.'
+    });
   }
 }
 
@@ -571,6 +582,548 @@ export function recordChronicle(state, milestone) {
   };
   state.chronicle.push(entry);
   return entry;
+}
+
+// ---------------------------------------------------------------- PHASE 3: WORLD MEMORY & LIVING SIMULATION
+export function ensureWorldMemory(state) {
+  if (!state.memories) state.memories = [];
+  if (!state.npcSim) {
+    state.npcSim = {};
+    for (const [id, prof] of Object.entries(D.NPC_PROFILES)) {
+      state.npcSim[id] = {
+        id,
+        career: prof.career,
+        employer: prof.employer,
+        workplace: prof.workplace,
+        goal: prof.goal,
+        financialStatus: 'stable',
+        currentActivity: 'routine',
+        lastUpdateClock: state.clock,
+        memories: []
+      };
+    }
+  }
+  if (!state.npcNetwork) {
+    state.npcNetwork = {};
+    for (const rel of D.INITIAL_NPC_NETWORK) {
+      const key = [rel.source, rel.target].sort().join('|');
+      state.npcNetwork[key] = {
+        a: rel.source,
+        b: rel.target,
+        status: rel.status,
+        affinity: rel.affinity,
+        trust: rel.trust,
+        role: rel.role,
+        lastInteractionClock: state.clock,
+        milestones: [`Established bond as ${rel.status.replace('_', ' ')}.`]
+      };
+    }
+  }
+  if (!state.worldLocations) {
+    state.worldLocations = {};
+    for (const [locId, init] of Object.entries(D.INITIAL_LOCATION_STATES)) {
+      state.worldLocations[locId] = {
+        id: locId,
+        activityLevel: init.activityLevel,
+        reputation: init.reputation,
+        popularity: init.popularity,
+        history: [...init.notableHistory],
+        lastEventClock: state.clock
+      };
+    }
+  }
+  if (!state.worldEvents) {
+    state.worldEvents = {
+      active: [],
+      history: []
+    };
+  }
+  if (!state.socialFeed) {
+    state.socialFeed = [];
+  }
+  if (!state.causalTriggers) {
+    state.causalTriggers = [];
+  }
+}
+
+// Record a persistent structured memory with deduplication and bounds management
+export function recordMemory(state, mem) {
+  ensureWorldMemory(state);
+  const type = mem.type || 'general';
+  const entities = Array.isArray(mem.entities) ? [...mem.entities] : [];
+  const location = mem.location || state.location || 'home';
+  const importance = Number(mem.importance) || D.MEMORY_IMPORTANCE.NOTABLE;
+  const visibility = mem.visibility || 'public';
+  const context = String(mem.context || '').trim();
+  const title = String(mem.title || '').trim();
+  const isRumor = !!mem.isRumor || visibility === 'rumor';
+
+  const existing = state.memories.find((m) =>
+    m.type === type && m.title === title && Math.abs(m.clock - state.clock) < 1440
+  );
+  if (existing) return existing;
+
+  const record = {
+    id: nextId(state),
+    clock: state.clock,
+    date: formatDateOnly(state.clock),
+    type,
+    title,
+    entities,
+    location,
+    importance,
+    visibility,
+    isRumor,
+    verified: !isRumor,
+    context,
+    relatedMemories: mem.relatedMemories || []
+  };
+
+  state.memories.push(record);
+
+  if (state.memories.length > D.MAX_WORLD_MEMORIES) {
+    let pruneIndex = -1;
+    for (let i = 0; i < state.memories.length; i++) {
+      const candidate = state.memories[i];
+      if (candidate.importance >= D.MEMORY_IMPORTANCE.HISTORICAL) continue;
+      if (pruneIndex === -1) {
+        pruneIndex = i;
+      } else {
+        const curBest = state.memories[pruneIndex];
+        if (candidate.importance < curBest.importance ||
+           (candidate.importance === curBest.importance && candidate.clock < curBest.clock)) {
+          pruneIndex = i;
+        }
+      }
+    }
+    if (pruneIndex !== -1) {
+      state.memories.splice(pruneIndex, 1);
+    }
+  }
+
+  for (const ent of entities) {
+    if (ent !== 'pithe' && state.npcSim && state.npcSim[ent]) {
+      recordNpcMemory(state, ent, {
+        sourceEntity: mem.sourceEntity || 'world',
+        title,
+        context,
+        importance,
+        clock: state.clock
+      });
+    }
+  }
+
+  if (location && state.worldLocations && state.worldLocations[location] && importance >= D.MEMORY_IMPORTANCE.NOTABLE) {
+    const locState = state.worldLocations[location];
+    if (!locState.history.includes(title)) {
+      locState.history.push(title);
+      if (locState.history.length > 25) locState.history.shift();
+    }
+  }
+
+  if (visibility === 'public' || visibility === 'rumor') {
+    state.socialFeed.push({
+      id: record.id,
+      clock: state.clock,
+      title,
+      context,
+      isRumor,
+      verified: !isRumor,
+      location,
+      importance
+    });
+    if (state.socialFeed.length > 50) state.socialFeed.shift();
+  }
+
+  return record;
+}
+
+export function queryMemories(state, filter = {}) {
+  ensureWorldMemory(state);
+  return state.memories.filter((m) => {
+    if (filter.entity && !m.entities.includes(filter.entity)) return false;
+    if (filter.location && m.location !== filter.location) return false;
+    if (filter.type && m.type !== filter.type) return false;
+    if (filter.minImportance && m.importance < filter.minImportance) return false;
+    if (filter.visibility && m.visibility !== filter.visibility) return false;
+    if (filter.verified !== undefined && m.verified !== filter.verified) return false;
+    if (filter.sinceClock !== undefined && m.clock < filter.sinceClock) return false;
+    return true;
+  });
+}
+
+export function recordNpcMemory(state, npcId, mem) {
+  ensureWorldMemory(state);
+  const sim = state.npcSim[npcId];
+  if (!sim) return null;
+  if (!sim.memories) sim.memories = [];
+
+  const title = String(mem.title || '').trim();
+  const context = String(mem.context || '').trim();
+  const importance = Number(mem.importance) || D.MEMORY_IMPORTANCE.NOTABLE;
+
+  const dup = sim.memories.find((m) => m.title === title && Math.abs(m.clock - state.clock) < 1440);
+  if (dup) return dup;
+
+  const entry = {
+    id: nextId(state),
+    clock: mem.clock !== undefined ? mem.clock : state.clock,
+    date: formatDateOnly(mem.clock !== undefined ? mem.clock : state.clock),
+    sourceEntity: mem.sourceEntity || 'world',
+    title,
+    context,
+    importance
+  };
+
+  sim.memories.push(entry);
+  if (sim.memories.length > D.MAX_NPC_MEMORIES) {
+    let lowestIdx = 0;
+    for (let i = 1; i < sim.memories.length; i++) {
+      if (sim.memories[i].importance < sim.memories[lowestIdx].importance) lowestIdx = i;
+    }
+    sim.memories.splice(lowestIdx, 1);
+  }
+  return entry;
+}
+
+export function processWorldSimulation(state) {
+  processAutonomousNpcLives(state);
+  processNpcRelationships(state);
+  processSocialRumorPropagation(state);
+  processLocationDevelopment(state);
+  processEmergentWorldEvents(state);
+  processCausalTriggers(state);
+}
+
+export function processLocationDevelopment(state) {
+  ensureWorldMemory(state);
+  const curDay = dayKey(state.clock);
+  if (state.lastLocDay === curDay) return;
+  state.lastLocDay = curDay;
+
+  for (const [locId, loc] of Object.entries(state.worldLocations)) {
+    if (state.location === locId) {
+      loc.popularity = clamp(loc.popularity + 1, 0, 100);
+      loc.activityLevel = clamp(loc.activityLevel + 2, 10, 100);
+    }
+  }
+}
+
+export function processEmergentWorldEvents(state) {
+  ensureWorldMemory(state);
+  const curHour = hourOf(state.clock);
+  const wd = weekdayOf(state.clock);
+
+  const remainingActive = [];
+  for (const ev of state.worldEvents.active) {
+    if (state.clock >= ev.endClock) {
+      if (!ev.playerParticipated) {
+        const def = D.EMERGENT_EVENT_TYPES[ev.typeId];
+        const resText = def?.autonomousOutcome || `${ev.name} concluded.`;
+        recordMemory(state, {
+          type: 'event_resolution',
+          title: `${ev.name} concluded`,
+          entities: ev.participants || [],
+          location: ev.location,
+          importance: D.MEMORY_IMPORTANCE.NOTABLE,
+          visibility: 'public',
+          context: resText
+        });
+      }
+      state.worldEvents.history.push({ ...ev, resolvedClock: state.clock });
+      if (state.worldEvents.history.length > 50) state.worldEvents.history.shift();
+    } else {
+      remainingActive.push(ev);
+    }
+  }
+  state.worldEvents.active = remainingActive;
+
+  for (const [typeId, def] of Object.entries(D.EMERGENT_EVENT_TYPES)) {
+    if (state.worldEvents.active.some((e) => e.typeId === typeId)) continue;
+    if (def.activeDays && !def.activeDays.includes(wd)) continue;
+
+    const last = [...state.worldEvents.history].reverse().find((e) => e.typeId === typeId);
+    const intervalMinutes = (def.cadenceDays || 14) * 1440;
+    if (last && state.clock - last.startClock < intervalMinutes) continue;
+
+    const [startH, endH] = def.activeHours || [10, 18];
+    if (curHour >= startH && curHour < endH) {
+      const startClock = state.clock - Math.floor((curHour - startH) * 60);
+      const endClock = startClock + Math.floor((endH - startH) * 60);
+
+      const newEv = {
+        id: nextId(state),
+        typeId,
+        name: def.name,
+        location: def.location,
+        startClock,
+        endClock,
+        participants: def.participants || [],
+        desc: def.desc,
+        playerOption: def.playerOption,
+        playerParticipated: false
+      };
+      state.worldEvents.active.push(newEv);
+
+      recordMemory(state, {
+        type: 'event_spawn',
+        title: `${def.name} is taking place at ${D.LOCATIONS[def.location]?.name || def.location}`,
+        entities: def.participants || [],
+        location: def.location,
+        importance: D.MEMORY_IMPORTANCE.NOTABLE,
+        visibility: 'public',
+        context: def.desc
+      });
+    }
+  }
+}
+
+export function scheduleCausalTrigger(state, trigger) {
+  ensureWorldMemory(state);
+  const entry = {
+    id: nextId(state),
+    executeClock: state.clock + (Number(trigger.delayMinutes) || 1440),
+    title: trigger.title || 'Consequence',
+    action: trigger.action || 'memory',
+    data: trigger.data || {}
+  };
+  state.causalTriggers.push(entry);
+  return entry;
+}
+
+export function processCausalTriggers(state) {
+  ensureWorldMemory(state);
+  const pending = [];
+  const ready = [];
+  for (const t of state.causalTriggers) {
+    if (state.clock >= t.executeClock) ready.push(t);
+    else pending.push(t);
+  }
+  state.causalTriggers = pending;
+
+  for (const trig of ready) {
+    if (trig.action === 'memory') {
+      recordMemory(state, trig.data);
+    } else if (trig.action === 'npc_trust') {
+      if (trig.data.npc && trig.data.amount) {
+        addRel(state, trig.data.npc, trig.data.amount);
+        NOTES.push(`Consequence: ${D.NPCS[trig.data.npc]?.name || trig.data.npc} trust adjusted (${sign(trig.data.amount)}).`);
+      }
+    } else if (trig.action === 'rumor') {
+      createRumor(state, trig.data);
+    }
+  }
+}
+
+function doEventParticipate(state, eventId) {
+  ensureWorldMemory(state);
+  const ev = state.worldEvents.active.find((e) => e.id === Number(eventId));
+  if (!ev) return { error: 'World event not found or has already ended.' };
+  if (state.location !== ev.location) return { error: `You must be at ${D.LOCATIONS[ev.location]?.name || ev.location} to participate.` };
+  if (ev.playerParticipated) return { error: 'You have already participated in this event.' };
+
+  const opt = ev.playerOption;
+  if (!opt) return { error: 'No player action available for this event.' };
+
+  if (opt.cost && state.money < opt.cost) return { error: `Participating costs ${opt.cost} money (you have ${state.money}).` };
+  if (opt.energy && opt.energy < 0 && state.needs.energy < -opt.energy) return { error: 'You do not have enough energy.' };
+
+  if (opt.cost) state.money -= opt.cost;
+  if (opt.energy) state.needs.energy = clamp(state.needs.energy + opt.energy, 0, 100);
+  if (opt.satiety) state.needs.satiety = clamp(state.needs.satiety + opt.satiety, 0, 100);
+
+  if (opt.rewards) {
+    if (opt.rewards.skill && opt.rewards.skillExp) grantSkillExp(state, opt.rewards.skill, opt.rewards.skillExp);
+    if (opt.rewards.exp) grantExp(state, opt.rewards.exp);
+  }
+
+  ev.playerParticipated = true;
+  advance(state, opt.minutes || 60);
+
+  recordMemory(state, {
+    type: 'event_attendance',
+    title: `Pithe attended ${ev.name}`,
+    entities: ['pithe', ...(ev.participants || [])],
+    location: ev.location,
+    importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+    visibility: 'public',
+    context: opt.narrative
+  });
+
+  for (const npcId of ev.participants || []) {
+    addRel(state, npcId, 5);
+    recordNpcMemory(state, npcId, {
+      sourceEntity: 'pithe',
+      title: `Shared experience with Pithe at ${ev.name}`,
+      context: opt.narrative,
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      clock: state.clock
+    });
+  }
+
+  NOTES.push(`Participated in ${ev.name}!`);
+  return {
+    title: ev.name,
+    narrative: [opt.narrative, `Your presence made a positive impression on community members and participants.`]
+  };
+}
+
+export function processNpcRelationships(state) {
+  ensureWorldMemory(state);
+  const curDay = dayKey(state.clock);
+  const curWeek = weekStart(curDay);
+
+  if (state.lastNpcRelWeek === curWeek) return;
+  state.lastNpcRelWeek = curWeek;
+
+  for (const [key, edge] of Object.entries(state.npcNetwork)) {
+    const profA = D.NPC_PROFILES[edge.a];
+    const profB = D.NPC_PROFILES[edge.b];
+    if (!profA || !profB) continue;
+
+    const sharedInterests = profA.interests.filter((i) => profB.interests.includes(i));
+    const inCircle = (profA.circle && profA.circle.includes(edge.b)) || (profB.circle && profB.circle.includes(edge.a));
+    const coLocated = profA.workplace === profB.workplace || profA.homeLocation === profB.homeLocation;
+
+    if (coLocated || sharedInterests.length > 0 || inCircle) {
+      edge.affinity = clamp(edge.affinity + 2, 0, 100);
+      edge.trust = clamp(edge.trust + 1, -100, 100);
+      edge.lastInteractionClock = state.clock;
+
+      if (edge.status === 'acquaintances' && edge.affinity >= 50) {
+        edge.status = 'friends';
+        const msg = `${D.NPCS[edge.a]?.name || edge.a} and ${D.NPCS[edge.b]?.name || edge.b} have become close friends.`;
+        edge.milestones.push(msg);
+        recordMemory(state, {
+          type: 'npc_relationship',
+          title: msg,
+          entities: [edge.a, edge.b],
+          location: profA.workplace,
+          importance: D.MEMORY_IMPORTANCE.NOTABLE,
+          visibility: 'public',
+          context: 'Bond strengthened through ongoing mutual interests and collaboration.'
+        });
+      } else if (edge.status === 'friends' && edge.affinity >= 80 && edge.trust >= 75) {
+        edge.status = 'close_friends';
+        const msg = `${D.NPCS[edge.a]?.name || edge.a} and ${D.NPCS[edge.b]?.name || edge.b} are now lifelong confidants.`;
+        edge.milestones.push(msg);
+      }
+    }
+  }
+}
+
+export function processSocialRumorPropagation(state) {
+  ensureWorldMemory(state);
+  const curDay = dayKey(state.clock);
+  if (state.lastRumorDay === curDay) return;
+  state.lastRumorDay = curDay;
+
+  const recentMems = queryMemories(state, { sinceClock: state.clock - 3 * 1440, minImportance: D.MEMORY_IMPORTANCE.NOTABLE });
+  for (const mem of recentMems) {
+    for (const ent of mem.entities) {
+      if (ent === 'pithe') {
+        for (const [npcId, rel] of Object.entries(state.relationships || {})) {
+          if (rel.affinity >= 25) {
+            recordNpcMemory(state, npcId, {
+              sourceEntity: 'word_of_mouth',
+              title: `Heard about Pithe: ${mem.title}`,
+              context: mem.context,
+              importance: D.MEMORY_IMPORTANCE.FLEETING,
+              clock: state.clock
+            });
+          }
+        }
+      } else if (state.npcSim[ent]) {
+        const prof = D.NPC_PROFILES[ent];
+        if (prof && prof.circle) {
+          for (const friendId of prof.circle) {
+            recordNpcMemory(state, friendId, {
+              sourceEntity: ent,
+              title: `Heard from ${D.NPCS[ent]?.name || ent}: ${mem.title}`,
+              context: mem.context,
+              importance: D.MEMORY_IMPORTANCE.FLEETING,
+              clock: state.clock
+            });
+          }
+        }
+      }
+    }
+  }
+}
+
+export function createRumor(state, rumorData) {
+  return recordMemory(state, {
+    ...rumorData,
+    visibility: 'rumor',
+    isRumor: true
+  });
+}
+
+export function verifyRumor(state, memoryId) {
+  ensureWorldMemory(state);
+  const mem = state.memories.find((m) => m.id === Number(memoryId));
+  if (!mem) return { ok: false, error: 'Memory record not found.' };
+  if (!mem.isRumor && mem.verified) return { ok: true, message: 'This fact is already confirmed and verified.' };
+
+  mem.isRumor = false;
+  mem.verified = true;
+  NOTES.push(`Rumor verified: "${mem.title}". It is now a confirmed fact.`);
+
+  recordNpcMemory(state, mem.entities[0] || 'dani', {
+    sourceEntity: 'pithe',
+    title: `Pithe verified rumor: ${mem.title}`,
+    context: 'Discussed and confirmed the authenticity of the information.',
+    importance: D.MEMORY_IMPORTANCE.NOTABLE,
+    clock: state.clock
+  });
+
+  return { ok: true, memory: mem };
+}
+
+export function processAutonomousNpcLives(state) {
+  ensureWorldMemory(state);
+  const curDay = dayKey(state.clock);
+  const curWeek = weekStart(curDay);
+
+  for (const [npcId, sim] of Object.entries(state.npcSim)) {
+    const prof = D.NPC_PROFILES[npcId];
+    if (!prof) continue;
+
+    if (sim.lastDayProcessed !== curDay) {
+      sim.lastDayProcessed = curDay;
+      const wd = weekdayOf(state.clock);
+      if (wd === 0 || wd === 6) {
+        sim.currentActivity = 'weekend_leisure';
+      } else {
+        sim.currentActivity = 'professional_duties';
+      }
+    }
+
+    if (sim.lastWeekProcessed !== curWeek) {
+      sim.lastWeekProcessed = curWeek;
+      sim.goalProgress = (sim.goalProgress || 0) + 1;
+      if (sim.goalProgress >= 4) {
+        sim.goalProgress = 0;
+        const milestoneMsg = `${D.NPCS[npcId]?.name || npcId} accomplished personal milestone: ${prof.goal}.`;
+        recordNpcMemory(state, npcId, {
+          sourceEntity: 'self',
+          title: 'Personal milestone achieved',
+          context: prof.goal,
+          importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+          clock: state.clock
+        });
+        recordMemory(state, {
+          type: 'npc_milestone',
+          title: milestoneMsg,
+          entities: [npcId],
+          location: prof.workplace,
+          importance: D.MEMORY_IMPORTANCE.NOTABLE,
+          visibility: 'public',
+          context: `Colleagues and locals noted ${D.NPCS[npcId]?.name || npcId}'s progress.`
+        });
+      }
+    }
+  }
 }
 
 // ---------------------------------------------------------------- career & employment engine
@@ -1051,6 +1604,22 @@ function doSocialInteract(state, npcId, type) {
     if (rel.affinity >= 70 && rel.status === 'friend') rel.status = 'close_friend';
     grantSkillExp(state, 'conversation', 10);
     grantExp(state, 8);
+    recordNpcMemory(state, npcId, {
+      sourceEntity: 'pithe',
+      title: `Spent casual social time with Pithe`,
+      context: 'Met up for coffee and engaging conversation.',
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      clock: state.clock
+    });
+    recordMemory(state, {
+      type: 'social',
+      title: `Pithe spent time with ${npc.name}`,
+      entities: ['pithe', npcId],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.FLEETING,
+      visibility: 'public',
+      context: `Pithe and ${npc.name} had a friendly hangout.`
+    });
     NOTES.push(`Spent quality time with ${npc.name}. Affinity and trust grew.`);
     return {
       title: `Social Outing with ${npc.name}`,
@@ -1066,6 +1635,22 @@ function doSocialInteract(state, npcId, type) {
     rel.affinity = clamp(rel.affinity + 12, 0, 100);
     rel.trust = clamp(rel.trust + 5, -100, 100);
     state.relations[npcId] = rel.trust;
+    recordNpcMemory(state, npcId, {
+      sourceEntity: 'pithe',
+      title: `Received a thoughtful gift from Pithe`,
+      context: 'Pithe surprised them with a generous gift.',
+      importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+      clock: state.clock
+    });
+    recordMemory(state, {
+      type: 'gift',
+      title: `Pithe gave a thoughtful gift to ${npc.name}`,
+      entities: ['pithe', npcId],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      visibility: 'public',
+      context: `${npc.name} warmly appreciated the thoughtful gesture.`
+    });
     NOTES.push(`Gave a thoughtful gift to ${npc.name}. They were delighted!`);
     return {
       title: `Gift Presented to ${npc.name}`,
@@ -1484,6 +2069,14 @@ function doTalk(state, npcId, topicId) {
       ? ['Dani reads each card twice and goes quiet. "These are better than the menu I lost." She pays 75 and presses a stamp card into your hand.']
       : ['Dani reads the cards, nods slowly and pays 60. "Plain and honest. That is what I asked for."'];
     NOTES.push(`Quest complete: The Missing Menu (${q.outcome}).`);
+    recordMemory(state, {
+      type: 'quest_completed',
+      title: 'Pithe delivered the new menu to Dani',
+      entities: ['pithe', 'dani'],
+      location: 'cafe',
+      importance: D.MEMORY_IMPORTANCE.MAJOR,
+      context: `Pithe successfully completed Dani's menu commission with ${q.outcome} quality.`
+    });
   } else if (t.special === 'after') {
     narrative = q.status === 'completed'
       ? ['"The new menu is up," Dani says. "People read it. Mostly."']
@@ -1556,6 +2149,8 @@ export function execute(state, action, opts = {}) {
     case 'social_interact': res = doSocialInteract(state, action.npc, action.interactType); break;
     case 'romance_action': res = doRomanceAction(state, action.npc, action.romanceType); break;
     case 'family_action': res = doFamilyAction(state, action.familyType, action.childName); break;
+    case 'event_participate': res = doEventParticipate(state, action.id); break;
+    case 'verify_rumor': res = verifyRumor(state, action.id); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
