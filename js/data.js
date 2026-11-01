@@ -99,22 +99,22 @@ export const TRAITS = [
 
 export const LOCATIONS = {
   home: {
-    id: 'home', name: 'Rented Room',
+    id: 'home', name: 'Rented Room', district: 'harbor_quarter',
     desc: 'A narrow room above a laundry. A desk, a camp bed, a kettle, a window over the lane.',
     open: null
   },
   library: {
-    id: 'library', name: 'Harbor Public Library',
+    id: 'library', name: 'Harbor Public Library', district: 'harbor_quarter',
     desc: 'Tall shelves, green lamps and a reading hall that smells of paper and floor polish.',
     open: { days: [1, 2, 3, 4, 5, 6], from: 9, to: 17, label: 'Mon-Sat 09:00-17:00' }
   },
   market: {
-    id: 'market', name: 'Lantern Market',
+    id: 'market', name: 'Lantern Market', district: 'lantern_district',
     desc: 'A covered market of stalls and paper lanterns. Saturday evening is Lantern Night.',
     open: { days: [0, 1, 2, 3, 4, 5, 6], from: 7, to: 22, label: 'Daily 07:00-22:00' }
   },
   cafe: {
-    id: 'cafe', name: 'Corner Cafe',
+    id: 'cafe', name: 'Corner Cafe', district: 'metro_core',
     desc: 'Six tables, a loud espresso machine and a chalkboard where the menu used to be.',
     open: { days: [0, 1, 2, 3, 4, 5, 6], from: 10, to: 20, label: 'Daily 10:00-20:00' }
   }
@@ -272,6 +272,353 @@ export const NPCS = {
       { id: 'deliver', label: 'Deliver the menu cards', when: 'quest_active', special: 'deliver', text: [] },
       { id: 'after', label: 'Ask about the menu', when: 'quest_over', special: 'after', text: [] }
     ]
+  }
+};
+
+// ==============================================================================
+// PHASE 7 - LIVING UNIVERSE DATA DEFINITIONS
+// ==============================================================================
+
+export const DISTRICTS = {
+  harbor_quarter: {
+    id: 'harbor_quarter',
+    name: 'Harbor Quarter',
+    desc: 'The historic seaside district, featuring tranquil coastal lanes, the public library, and residential quarters.',
+    locations: ['home', 'library'],
+    initialConditions: {
+      population: 4800,
+      commercialDev: 45,
+      civicDev: 70,
+      culturalActivity: 65,
+      environmentalQuality: 75,
+      reputation: 68
+    },
+    history: ['Established centuries ago around the merchant port; retains scholarly and artisanal traditions.']
+  },
+  lantern_district: {
+    id: 'lantern_district',
+    name: 'Lantern District',
+    desc: 'Vibrant trade precinct famed for Saturday Lantern Nights, street food, artisan stalls, and mercantile life.',
+    locations: ['market'],
+    initialConditions: {
+      population: 6200,
+      commercialDev: 80,
+      civicDev: 55,
+      culturalActivity: 85,
+      environmentalQuality: 60,
+      reputation: 74
+    },
+    history: ['A nexus of regional producers, culinary families, and maritime merchants.']
+  },
+  metro_core: {
+    id: 'metro_core',
+    name: 'Metropolitan Core',
+    desc: 'The bustling financial, corporate, and social epicenter of the metropolis.',
+    locations: ['downtown', 'cafe'],
+    initialConditions: {
+      population: 14500,
+      commercialDev: 92,
+      civicDev: 80,
+      culturalActivity: 75,
+      environmentalQuality: 52,
+      reputation: 82
+    },
+    history: ['Transformed by early century commercial towers into the premier financial capital.']
+  },
+  university_quarter: {
+    id: 'university_quarter',
+    name: 'University Quarter',
+    desc: 'Leafy avenues, academic faculties, student cooperatives, and intellectual societies.',
+    locations: ['university'],
+    initialConditions: {
+      population: 8900,
+      commercialDev: 58,
+      civicDev: 88,
+      culturalActivity: 90,
+      environmentalQuality: 80,
+      reputation: 86
+    },
+    history: ['Home to centuries of academic inquiry, scientific publishing, and student civic activism.']
+  },
+  innovation_corridor: {
+    id: 'innovation_corridor',
+    name: 'Innovation Corridor',
+    desc: 'Modern technological zone housing startup incubators, venture labs, and engineering campuses.',
+    locations: ['tech_park'],
+    initialConditions: {
+      population: 7100,
+      commercialDev: 88,
+      civicDev: 75,
+      culturalActivity: 60,
+      environmentalQuality: 70,
+      reputation: 79
+    },
+    history: ['Pioneered by university research spin-offs; attracts international software and design talent.']
+  },
+  coastal_marina: {
+    id: 'coastal_marina',
+    name: 'Coastal Marina',
+    desc: 'Picturesque waterfront promenade, athletic clubs, luxury docks, and open-air seaside cafes.',
+    locations: ['marina'],
+    initialConditions: {
+      population: 5300,
+      commercialDev: 70,
+      civicDev: 65,
+      culturalActivity: 80,
+      environmentalQuality: 88,
+      reputation: 84
+    },
+    history: ['Renewed coastal waterfront combining municipal nature reserves with modern leisure.']
+  }
+};
+
+export const LOCAL_BUSINESSES = {
+  corner_cafe: {
+    id: 'corner_cafe',
+    name: 'Corner Cafe',
+    district: 'metro_core',
+    location: 'cafe',
+    ownerNpc: 'dani',
+    sector: 'hospitality',
+    status: 'thriving',
+    performance: 75,
+    staffCount: 3,
+    weeklyRevenue: 420,
+    desc: 'An artisanal cafe beloved by local freelancers, students, and morning commuters.'
+  },
+  lantern_market_trade: {
+    id: 'lantern_market_trade',
+    name: "Teo's Merchant Supply",
+    district: 'lantern_district',
+    location: 'market',
+    ownerNpc: 'teo',
+    sector: 'retail',
+    status: 'stable',
+    performance: 70,
+    staffCount: 2,
+    weeklyRevenue: 380,
+    desc: 'Historic dry-goods and regional produce trading booth with multigenerational vendor ties.'
+  },
+  harbor_bookbindery: {
+    id: 'harbor_bookbindery',
+    name: 'Harbor Archival Press',
+    district: 'harbor_quarter',
+    location: 'library',
+    ownerNpc: 'mira',
+    sector: 'publishing',
+    status: 'stable',
+    performance: 65,
+    staffCount: 2,
+    weeklyRevenue: 290,
+    desc: 'Independent restoration press specializing in antique binding and civic manuscripts.'
+  },
+  prism_software_labs: {
+    id: 'prism_software_labs',
+    name: 'Prism Software Labs',
+    district: 'innovation_corridor',
+    location: 'tech_park',
+    ownerNpc: 'chloe',
+    sector: 'technology',
+    status: 'expanding',
+    performance: 85,
+    staffCount: 6,
+    weeklyRevenue: 850,
+    desc: 'Boutique distributed computing studio developing civic simulation and spatial UI engines.'
+  },
+  bayside_marine_crafts: {
+    id: 'bayside_marine_crafts',
+    name: 'Bayside Marine Outfitters',
+    district: 'coastal_marina',
+    location: 'marina',
+    ownerNpc: 'julian',
+    sector: 'recreation',
+    status: 'stable',
+    performance: 72,
+    staffCount: 3,
+    weeklyRevenue: 490,
+    desc: 'Seaside sports equipment, rowing gear workshop, and ocean conservation supplier.'
+  }
+};
+
+export const COMMUNITY_PROJECTS = {
+  waterfront_greenery: {
+    id: 'waterfront_greenery',
+    district: 'coastal_marina',
+    location: 'marina',
+    name: 'Bayside Coastal Promenade Greening',
+    desc: 'Planting salt-resistant maritime flora and solar lighting along the scenic boardwalk.',
+    institution: 'athletic_league',
+    targetProgress: 100,
+    costPerContribution: 25,
+    energyPerContribution: 18,
+    skill: 'fitness',
+    outcomes: {
+      environmentalQuality: +10,
+      reputation: +8,
+      culturalActivity: +5,
+      memory: 'The coastal promenade greening initiative was successfully completed.'
+    }
+  },
+  market_canopy_retrofit: {
+    id: 'market_canopy_retrofit',
+    district: 'lantern_district',
+    location: 'market',
+    name: 'Lantern Market Solar & Rain Canopy',
+    desc: 'Modernizing market stall canopies with micro-solar fabric and rain capture for vendor sustainability.',
+    institution: 'merchants_union',
+    targetProgress: 120,
+    costPerContribution: 30,
+    energyPerContribution: 20,
+    skill: 'negotiation',
+    outcomes: {
+      commercialDev: +8,
+      civicDev: +10,
+      environmentalQuality: +6,
+      memory: 'Lantern Market completed its solar canopy retrofit, securing vendor prosperity.'
+    }
+  },
+  archive_open_access: {
+    id: 'archive_open_access',
+    district: 'harbor_quarter',
+    location: 'library',
+    name: 'Metropolitan Digital Archive Open Access',
+    desc: 'Scanning and indexing fragile maritime registers into a public civic knowledge repository.',
+    institution: 'academic_society',
+    targetProgress: 100,
+    costPerContribution: 20,
+    energyPerContribution: 16,
+    skill: 'research',
+    outcomes: {
+      civicDev: +12,
+      culturalActivity: +8,
+      reputation: +6,
+      memory: 'The Harbor Library public digital archive became freely accessible to all residents.'
+    }
+  },
+  urban_tech_incubator: {
+    id: 'urban_tech_incubator',
+    district: 'innovation_corridor',
+    location: 'tech_park',
+    name: 'Civic Open-Source Tech Sandbox',
+    desc: 'Funding shared compute stations and laboratory equipment for aspiring local software engineers.',
+    institution: 'tech_guild',
+    targetProgress: 140,
+    costPerContribution: 35,
+    energyPerContribution: 20,
+    skill: 'programming',
+    outcomes: {
+      commercialDev: +12,
+      civicDev: +8,
+      reputation: +10,
+      memory: 'The Civic Open-Source Tech Sandbox opened its doors to local innovators.'
+    }
+  }
+};
+
+export const PHASE7_EVENT_TYPES = {
+  district_cultural_expo: {
+    id: 'district_cultural_expo',
+    name: 'District Heritage & Cultural Expo',
+    category: 'cultural',
+    cadenceDays: 21,
+    durationHours: 6,
+    activeHours: [12, 18],
+    preferredDistricts: ['harbor_quarter', 'university_quarter'],
+    desc: 'Neighborhood cultural guilds showcase traditional crafts, oral history recitals, and culinary arts.',
+    participantNpcs: ['mira', 'elena'],
+    playerOption: {
+      label: 'Exhibit and share historical reflections (2h)',
+      cost: 0,
+      energy: -15,
+      minutes: 120,
+      skill: 'research',
+      skillExp: 18,
+      exp: 20,
+      reputation: { academic: 8, community: 10 },
+      narrative: 'You presented local oral histories to captivated attendees and civic historians.'
+    },
+    consequences: {
+      districtEffect: { culturalActivity: +8, reputation: +4 },
+      autonomousOutcome: 'The cultural expo strengthened neighborhood pride and historical appreciation.'
+    }
+  },
+  economic_fair_cooperative: {
+    id: 'economic_fair_cooperative',
+    name: 'Inter-District Commerce & Supplier Fair',
+    category: 'economic',
+    cadenceDays: 28,
+    durationHours: 8,
+    activeHours: [10, 18],
+    preferredDistricts: ['lantern_district', 'metro_core'],
+    desc: 'Merchants, wholesalers, and startup founders negotiate cross-district distribution contracts.',
+    participantNpcs: ['teo', 'marcus'],
+    playerOption: {
+      label: 'Negotiate bulk supply agreements (2h)',
+      cost: 15,
+      energy: -18,
+      minutes: 120,
+      skill: 'negotiation',
+      skillExp: 20,
+      exp: 22,
+      reputation: { professional: 10, community: 8 },
+      narrative: 'You mediated supplier relationships and secured favorable trade terms for neighborhood stores.'
+    },
+    consequences: {
+      districtEffect: { commercialDev: +10, reputation: +5 },
+      autonomousOutcome: 'The commerce fair produced lucrative contracts, lowering inventory overheads across city markets.'
+    }
+  },
+  civic_environmental_cleanup: {
+    id: 'civic_environmental_cleanup',
+    name: 'Bayside Waters & Shoreline Action Day',
+    category: 'environmental',
+    cadenceDays: 21,
+    durationHours: 5,
+    activeHours: [9, 14],
+    preferredDistricts: ['coastal_marina', 'harbor_quarter'],
+    desc: 'Volunteers, rowers, and marine biologists join forces to remove plastic drift and plant coastal reeds.',
+    participantNpcs: ['julian', 'chloe'],
+    playerOption: {
+      label: 'Lead volunteer shoreline sweep (2h)',
+      cost: 0,
+      energy: -22,
+      minutes: 120,
+      skill: 'fitness',
+      skillExp: 18,
+      exp: 20,
+      reputation: { athletic: 8, community: 12 },
+      narrative: 'You worked the low-tide shallows alongside Julian, restoring pristine shoreline habitats.'
+    },
+    consequences: {
+      districtEffect: { environmentalQuality: +12, civicDev: +6 },
+      autonomousOutcome: 'Community volunteers cleared tons of bayside drift, restoring clean tidal waters.'
+    }
+  },
+  tech_symposium_breakthrough: {
+    id: 'tech_symposium_breakthrough',
+    name: 'Innovation Corridor Tech Showcase',
+    category: 'institutional',
+    cadenceDays: 30,
+    durationHours: 6,
+    activeHours: [13, 19],
+    preferredDistricts: ['innovation_corridor', 'university_quarter'],
+    desc: 'Engineers, venture leaders, and academic researchers exhibit applied systems and open-source models.',
+    participantNpcs: ['chloe', 'elena'],
+    playerOption: {
+      label: 'Present system architecture demo (2h)',
+      cost: 0,
+      energy: -20,
+      minutes: 120,
+      skill: 'programming',
+      skillExp: 22,
+      exp: 24,
+      reputation: { professional: 12, academic: 8 },
+      narrative: 'You showcased responsive data architecture to a packed auditorium of fellow engineers.'
+    },
+    consequences: {
+      districtEffect: { commercialDev: +8, civicDev: +8 },
+      autonomousOutcome: 'Key engineering demos drew venture interest and created student research fellowships.'
+    }
   }
 };
 
@@ -439,22 +786,22 @@ export const EXPLORE_CLUES = {
 
 export const EXTENDED_LOCATIONS = {
   downtown: {
-    id: 'downtown', name: 'Downtown Metropolis',
+    id: 'downtown', name: 'Downtown Metropolis', district: 'metro_core',
     desc: 'Commercial core with skyscrapers, financial firms, corporate headquarters and shopping avenues.',
     open: { days: [0, 1, 2, 3, 4, 5, 6], from: 6, to: 23, label: 'Daily 06:00-23:00' }
   },
   university: {
-    id: 'university', name: 'Metropolitan University',
+    id: 'university', name: 'Metropolitan University', district: 'university_quarter',
     desc: 'Historic stone buildings blended with modern science labs, lecture halls and student commons.',
     open: { days: [1, 2, 3, 4, 5, 6], from: 8, to: 21, label: 'Mon-Sat 08:00-21:00' }
   },
   tech_park: {
-    id: 'tech_park', name: 'Innovation Hub',
+    id: 'tech_park', name: 'Innovation Hub', district: 'innovation_corridor',
     desc: 'High-tech corporate campus featuring tech startups, incubators, research labs and co-working spaces.',
     open: { days: [1, 2, 3, 4, 5], from: 7, to: 20, label: 'Mon-Fri 07:00-20:00' }
   },
   marina: {
-    id: 'marina', name: 'Bayside Marina District',
+    id: 'marina', name: 'Bayside Marina District', district: 'coastal_marina',
     desc: 'Scenic waterfront promenade lined with upscale dining, luxury residences, and boardwalk cafes.',
     open: { days: [0, 1, 2, 3, 4, 5, 6], from: 9, to: 23, label: 'Daily 09:00-23:00' }
   }
@@ -1443,7 +1790,13 @@ export const ACHIEVEMENTS = [
   { id: 'family_heirloom', category: 'Legacy', name: 'Keeper of the Mantle', desc: 'Consecrate and preserve a cherished family heirloom with documented provenance.', icon: 'progress', hidden: false },
   { id: 'family_historian', category: 'Legacy', name: 'Keeper of Truths', desc: 'Investigate oral lore and verify a historical family mystery.', icon: 'journal', hidden: false },
   { id: 'torchbearer', category: 'Succession', name: 'Torchbearer', desc: 'Successfully transition the family simulation to an eligible successor generation.', icon: 'progress', hidden: false },
-  { id: 'dynasty_builder', category: 'Succession', name: 'Endless Story', desc: 'Sustain your lineage across multiple generations with enduring honor and assets.', icon: 'world', hidden: true }
+  { id: 'dynasty_builder', category: 'Succession', name: 'Endless Story', desc: 'Sustain your lineage across multiple generations with enduring honor and assets.', icon: 'world', hidden: true },
+
+  // Phase 7 Living Universe Milestones
+  { id: 'district_steward', category: 'Universe', name: 'District Steward', desc: 'Champion a municipal district to flourishing prosperity and cultural vitality.', icon: 'world', hidden: false },
+  { id: 'civic_architect', category: 'Universe', name: 'Civic Architect', desc: 'Fund or complete a public community infrastructure project.', icon: 'people', hidden: false },
+  { id: 'economic_catalyst', category: 'Universe', name: 'Economic Catalyst', desc: 'Collaborate with or support local independent businesses through market turbulence.', icon: 'properties', hidden: false },
+  { id: 'community_anchor', category: 'Universe', name: 'Community Anchor', desc: 'Engage actively across metropolitan civic and cultural institutions.', icon: 'world', hidden: false }
 ];
 
 // ==============================================================================

@@ -139,6 +139,7 @@ export function createCharacter(o = {}) {
   ensurePhase4(state);
   ensurePhase5(state);
   ensurePhase6(state);
+  ensurePhase7(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -179,6 +180,7 @@ export function migrateState(s) {
   ensurePhase4(s);
   ensurePhase5(s);
   ensurePhase6(s);
+  ensurePhase7(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -351,6 +353,10 @@ function checkDeadline(state) {
 }
 
 // ---------------------------------------------------------------- world: schedules, events, prices
+export function locationDistrict(locId) {
+  return D.LOCATIONS[locId]?.district || null;
+}
+
 export function npcLocation(npcId, clock) {
   const wd = weekdayOf(clock), h = hourOf(clock);
   for (const s of D.NPCS[npcId].schedule) {
@@ -379,6 +385,7 @@ export function priceOf(state, itemId) {
   let p = D.ITEMS[itemId].price;
   if (isLanternNight(state.clock)) p *= 0.85;
   if (state.flags.haggleDay === dayKey(state.clock)) p *= 0.9;
+  if (state.economy?.priceMultiplier) p *= state.economy.priceMultiplier;
   return Math.max(1, Math.round(p));
 }
 function activityCost(state, id) {
@@ -835,6 +842,7 @@ export function processWorldSimulation(state) {
   processCausalTriggers(state);
   processEmergentStories(state);
   processNpcFamilyDynamics(state);
+  processLivingUniverse(state);
 }
 
 export function processLocationDevelopment(state) {
@@ -1299,6 +1307,616 @@ function doJobApply(state, jobId) {
       `Your credentials and portfolio made an immediate impression at ${job.company}.`,
       `You are officially hired as ${job.title}! Weekly salary: ${job.salary} money.`
     ]
+  };
+}
+
+// ==============================================================================
+// PHASE 7 - THE LIVING UNIVERSE SIMULATION RULES
+// ==============================================================================
+
+export function ensurePhase7(state) {
+  if (!state.districts) {
+    state.districts = {};
+    for (const [id, def] of Object.entries(D.DISTRICTS || {})) {
+      state.districts[id] = {
+        id,
+        name: def.name,
+        population: def.initialConditions.population,
+        commercialDev: def.initialConditions.commercialDev,
+        civicDev: def.initialConditions.civicDev,
+        culturalActivity: def.initialConditions.culturalActivity,
+        environmentalQuality: def.initialConditions.environmentalQuality,
+        reputation: def.initialConditions.reputation,
+        history: [...(def.history || [])],
+        lastUpdateClock: state.clock || 0
+      };
+    }
+  }
+
+  if (!state.economy) {
+    state.economy = {
+      prosperityIndex: 72,
+      priceMultiplier: 1.0,
+      sectorDemand: {
+        hospitality: 70,
+        retail: 68,
+        technology: 78,
+        publishing: 60,
+        recreation: 65
+      },
+      businesses: {},
+      collaborations: [],
+      lastEconomyClock: state.clock || 0
+    };
+    for (const [bizId, bDef] of Object.entries(D.LOCAL_BUSINESSES || {})) {
+      state.economy.businesses[bizId] = {
+        id: bizId,
+        name: bDef.name,
+        district: bDef.district,
+        location: bDef.location,
+        ownerNpc: bDef.ownerNpc,
+        sector: bDef.sector,
+        status: bDef.status,
+        performance: bDef.performance,
+        staffCount: bDef.staffCount,
+        weeklyRevenue: bDef.weeklyRevenue,
+        history: [`Established operations in ${D.DISTRICTS[bDef.district]?.name || bDef.district}.`]
+      };
+    }
+  }
+
+  if (!state.institutions) {
+    state.institutions = {
+      projects: {},
+      completedProjects: [],
+      totalContributions: 0,
+      civicReputation: 50,
+      lastProjectClock: state.clock || 0
+    };
+    for (const [projId, pDef] of Object.entries(D.COMMUNITY_PROJECTS || {})) {
+      state.institutions.projects[projId] = {
+        id: projId,
+        name: pDef.name,
+        district: pDef.district,
+        location: pDef.location,
+        progress: 0,
+        targetProgress: pDef.targetProgress,
+        completed: false,
+        contributionsCount: 0
+      };
+    }
+  }
+
+  if (!state.livingUniverseSim) {
+    state.livingUniverseSim = {
+      lastSimWeek: null,
+      lastSimDay: null,
+      activeEvents: [],
+      eventHistory: []
+    };
+  }
+}
+
+export function processLivingUniverse(state) {
+  ensurePhase7(state);
+  ensureWorldMemory(state);
+  ensureDay(state);
+
+  const curDay = dayKey(state.clock);
+  const curWeek = weekStart(curDay);
+
+  // Daily living universe ticking
+  if (state.livingUniverseSim.lastSimDay !== curDay) {
+    state.livingUniverseSim.lastSimDay = curDay;
+    processPhase7EmergentEvents(state);
+    processAutonomousInstitutions(state);
+  }
+
+  // Weekly living universe macro ticking
+  if (state.livingUniverseSim.lastSimWeek !== curWeek) {
+    state.livingUniverseSim.lastSimWeek = curWeek;
+    processDistrictEvolution(state);
+    processDynamicEconomy(state);
+    processNpcEcosystemAutonomy(state);
+    checkAchievements(state);
+  }
+}
+
+export function processDistrictEvolution(state) {
+  ensurePhase7(state);
+  for (const [dId, dist] of Object.entries(state.districts)) {
+    const locations = D.DISTRICTS[dId]?.locations || [];
+    let avgPopularity = 50;
+    let avgActivity = 50;
+    if (locations.length > 0 && state.worldLocations) {
+      let popSum = 0, actSum = 0, count = 0;
+      for (const locId of locations) {
+        if (state.worldLocations[locId]) {
+          popSum += state.worldLocations[locId].popularity || 50;
+          actSum += state.worldLocations[locId].activityLevel || 50;
+          count++;
+        }
+      }
+      if (count > 0) {
+        avgPopularity = popSum / count;
+        avgActivity = actSum / count;
+      }
+    }
+
+    // Dynamic adjustment based on local conditions
+    const commercialDelta = (avgActivity > 60 ? 1 : avgActivity < 30 ? -1 : 0);
+    dist.commercialDev = clamp(dist.commercialDev + commercialDelta, 20, 100);
+
+    const culturalDelta = (avgPopularity > 65 ? 1 : avgPopularity < 35 ? -1 : 0);
+    dist.culturalActivity = clamp(dist.culturalActivity + culturalDelta, 20, 100);
+
+    // Environmental wear / natural restoration
+    if (dist.commercialDev > 85) dist.environmentalQuality = clamp(dist.environmentalQuality - 1, 30, 100);
+    else if (dist.civicDev > 75) dist.environmentalQuality = clamp(dist.environmentalQuality + 1, 30, 100);
+
+    // Reputation reflects civic, cultural, and environmental balance
+    const computedRep = Math.round((dist.civicDev * 0.35) + (dist.culturalActivity * 0.35) + (dist.environmentalQuality * 0.3));
+    dist.reputation = clamp(computedRep, 25, 98);
+
+    // Demographics track reputation & commercial vibrancy
+    const growthRate = (dist.reputation > 75 ? 1.01 : dist.reputation < 45 ? 0.99 : 1.0);
+    dist.population = Math.round(dist.population * growthRate);
+
+    // Update locations to reflect their district
+    for (const locId of locations) {
+      if (state.worldLocations && state.worldLocations[locId]) {
+        const wLoc = state.worldLocations[locId];
+        wLoc.reputation = clamp(Math.round((wLoc.reputation * 0.7) + (dist.reputation * 0.3)), 10, 100);
+      }
+    }
+  }
+}
+
+export function processDynamicEconomy(state) {
+  ensurePhase7(state);
+  const eco = state.economy;
+
+  // Sector demand drift
+  let totalPerformance = 0;
+  let bizCount = 0;
+  for (const [bId, biz] of Object.entries(eco.businesses)) {
+    const demand = eco.sectorDemand[biz.sector] || 70;
+    // Performance evolves based on staff, demand, and district health
+    const dist = state.districts[biz.district];
+    const distHealth = dist ? (dist.commercialDev + dist.reputation) / 2 : 60;
+    const performanceDelta = (demand >= 70 && distHealth >= 65) ? 2 : (demand < 50 || distHealth < 40) ? -2 : 0;
+    biz.performance = clamp(biz.performance + performanceDelta, 20, 100);
+
+    // Business lifecycle transitions
+    if (biz.performance >= 85 && biz.status !== 'expanding') {
+      biz.status = 'expanding';
+      biz.staffCount = Math.min(8, biz.staffCount + 1);
+      const note = `${biz.name} expanded operations and added staff due to booming demand.`;
+      biz.history.push(note);
+      recordMemory(state, {
+        type: 'business_expansion',
+        title: note,
+        entities: [biz.ownerNpc],
+        location: biz.location,
+        importance: D.MEMORY_IMPORTANCE.NOTABLE,
+        visibility: 'public',
+        context: note
+      });
+    } else if (biz.performance < 40 && biz.status !== 'struggling') {
+      biz.status = 'struggling';
+      const note = `${biz.name} is facing market headwinds and reduced customer footfall.`;
+      biz.history.push(note);
+    } else if (biz.performance >= 50 && biz.performance < 85 && biz.status !== 'stable') {
+      biz.status = 'stable';
+    }
+
+    // Revenue calculation
+    const baseRev = D.LOCAL_BUSINESSES[bId]?.weeklyRevenue || 350;
+    biz.weeklyRevenue = Math.round(baseRev * (biz.performance / 70) * (biz.staffCount / 3));
+
+    totalPerformance += biz.performance;
+    bizCount++;
+  }
+
+  // Macro prosperity index & price multiplier
+  if (bizCount > 0) {
+    eco.prosperityIndex = clamp(Math.round(totalPerformance / bizCount), 30, 95);
+    // When economy is booming, slight cost inflation; in downturn, competitive discounting
+    eco.priceMultiplier = Number((0.9 + (eco.prosperityIndex / 500)).toFixed(2));
+  }
+}
+
+export function processAutonomousInstitutions(state) {
+  ensurePhase7(state);
+  const inst = state.institutions;
+  for (const [pId, proj] of Object.entries(inst.projects)) {
+    if (proj.completed) continue;
+    const def = D.COMMUNITY_PROJECTS[pId];
+    if (!def) continue;
+
+    // Autonomous progress driven by sponsoring organization & civic development
+    const dist = state.districts[proj.district];
+    const civicDev = dist?.civicDev || 60;
+    const autonomousRate = civicDev >= 75 ? 2 : civicDev >= 50 ? 1 : 0;
+
+    proj.progress += autonomousRate;
+
+    if (proj.progress >= proj.targetProgress) {
+      proj.completed = true;
+      inst.completedProjects.push(proj.id);
+      const msg = def.outcomes?.memory || `${proj.name} has reached full civic completion!`;
+      recordMemory(state, {
+        type: 'project_completion',
+        title: `Community Project Completed: ${proj.name}`,
+        entities: ['pithe'],
+        location: proj.location,
+        importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+        visibility: 'public',
+        context: msg
+      });
+      if (dist && def.outcomes) {
+        if (def.outcomes.environmentalQuality) dist.environmentalQuality = clamp(dist.environmentalQuality + def.outcomes.environmentalQuality, 10, 100);
+        if (def.outcomes.commercialDev) dist.commercialDev = clamp(dist.commercialDev + def.outcomes.commercialDev, 10, 100);
+        if (def.outcomes.civicDev) dist.civicDev = clamp(dist.civicDev + def.outcomes.civicDev, 10, 100);
+        if (def.outcomes.culturalActivity) dist.culturalActivity = clamp(dist.culturalActivity + def.outcomes.culturalActivity, 10, 100);
+        if (def.outcomes.reputation) dist.reputation = clamp(dist.reputation + def.outcomes.reputation, 10, 100);
+        dist.history.push(msg);
+      }
+      NOTES.push(`Civic milestone: ${proj.name} successfully completed!`);
+    }
+  }
+}
+
+export function processNpcEcosystemAutonomy(state) {
+  ensurePhase7(state);
+  for (const [npcId, sim] of Object.entries(state.npcSim || {})) {
+    const prof = D.NPC_PROFILES[npcId];
+    if (!prof) continue;
+
+    // Check employer / business performance
+    let businessHealthy = true;
+    for (const biz of Object.values(state.economy.businesses)) {
+      if (biz.ownerNpc === npcId && biz.status === 'struggling') {
+        businessHealthy = false;
+        break;
+      }
+    }
+
+    if (!businessHealthy) {
+      sim.financialStatus = 'strained';
+    } else {
+      sim.financialStatus = 'prosperous';
+    }
+
+    // Community engagement & institutional ties
+    if (prof.interests && prof.interests.includes('civic') && state.institutions) {
+      state.institutions.civicReputation = clamp(state.institutions.civicReputation + 1, 0, 100);
+    }
+  }
+}
+
+export function processPhase7EmergentEvents(state) {
+  ensurePhase7(state);
+  const curHour = hourOf(state.clock);
+  const wd = weekdayOf(state.clock);
+
+  const active = [];
+  for (const ev of state.livingUniverseSim.activeEvents) {
+    if (state.clock >= ev.endClock) {
+      // Event resolved
+      const def = D.PHASE7_EVENT_TYPES[ev.typeId];
+      const outcomeText = def?.consequences?.autonomousOutcome || `${ev.name} concluded successfully.`;
+      if (!ev.playerParticipated) {
+        recordMemory(state, {
+          type: 'phase7_event_resolution',
+          title: `${ev.name} concluded`,
+          entities: ev.participantNpcs || [],
+          location: ev.location,
+          importance: D.MEMORY_IMPORTANCE.NOTABLE,
+          visibility: 'public',
+          context: outcomeText
+        });
+      }
+      // Apply district consequences
+      if (def?.consequences?.districtEffect && state.districts[ev.districtId]) {
+        const dist = state.districts[ev.districtId];
+        for (const [k, v] of Object.entries(def.consequences.districtEffect)) {
+          dist[k] = clamp((dist[k] || 50) + v, 10, 100);
+        }
+      }
+      state.livingUniverseSim.eventHistory.push({ ...ev, resolvedClock: state.clock });
+      if (state.livingUniverseSim.eventHistory.length > 30) state.livingUniverseSim.eventHistory.shift();
+    } else {
+      active.push(ev);
+    }
+  }
+  state.livingUniverseSim.activeEvents = active;
+
+  // Evaluate candidate events
+  for (const [typeId, def] of Object.entries(D.PHASE7_EVENT_TYPES)) {
+    if (state.livingUniverseSim.activeEvents.some((e) => e.typeId === typeId)) continue;
+    const last = [...state.livingUniverseSim.eventHistory].reverse().find((e) => e.typeId === typeId);
+    const intervalMinutes = (def.cadenceDays || 21) * 1440;
+    if (last && state.clock - last.startClock < intervalMinutes) continue;
+
+    const [startH, endH] = def.activeHours || [10, 18];
+    if (curHour >= startH && curHour < endH) {
+      // Choose district
+      const targetDistrictId = def.preferredDistricts ? def.preferredDistricts[0] : 'metro_core';
+      const locId = D.DISTRICTS[targetDistrictId]?.locations?.[0] || 'market';
+      const startClock = state.clock;
+      const endClock = startClock + ((def.durationHours || 6) * 60);
+
+      const newEv = {
+        id: nextId(state),
+        typeId,
+        name: def.name,
+        category: def.category,
+        districtId: targetDistrictId,
+        location: locId,
+        startClock,
+        endClock,
+        participantNpcs: def.participantNpcs || [],
+        desc: def.desc,
+        playerOption: def.playerOption,
+        playerParticipated: false
+      };
+      state.livingUniverseSim.activeEvents.push(newEv);
+
+      recordMemory(state, {
+        type: 'phase7_event_spawn',
+        title: `${def.name} in ${D.DISTRICTS[targetDistrictId]?.name || targetDistrictId}`,
+        entities: def.participantNpcs || [],
+        location: locId,
+        importance: D.MEMORY_IMPORTANCE.NOTABLE,
+        visibility: 'public',
+        context: def.desc
+      });
+    }
+  }
+}
+
+// ---------------------------------------------------------------- Player Actions for Living Universe
+export function doDistrictAction(state, districtId, actionType) {
+  ensurePhase7(state);
+  const dist = state.districts[districtId];
+  if (!dist) return { error: 'District not found in municipal registry.' };
+
+  const curLocDist = D.LOCATIONS[state.location]?.district;
+  if (curLocDist !== districtId) {
+    return { error: `You must be located within ${D.DISTRICTS[districtId]?.name || districtId} to perform this district action.` };
+  }
+
+  if (state.needs.energy < 15) return { error: 'You are too exhausted for civic district action.' };
+
+  if (actionType === 'support_culture') {
+    const cost = 20;
+    if (state.money < cost) return { error: `Cultural support donation requires ${cost} money.` };
+    state.money -= cost;
+    state.needs.energy = Math.max(0, state.needs.energy - 12);
+    advance(state, 60);
+    dist.culturalActivity = clamp(dist.culturalActivity + 4, 10, 100);
+    dist.reputation = clamp(dist.reputation + 2, 10, 100);
+    adjustReputation(state, 'community', 4, 'District Cultural Patronage');
+    grantExp(state, 12);
+    grantSkillExp(state, 'research', 10);
+    const msg = `Pithe contributed patronage toward ${dist.name} neighborhood cultural arts.`;
+    recordMemory(state, {
+      type: 'district_patronage',
+      title: msg,
+      entities: ['pithe'],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      visibility: 'public',
+      context: msg
+    });
+    NOTES.push(`Supported ${dist.name} cultural activities (+4 Cultural Vitality).`);
+    return {
+      title: `Patron of ${dist.name}`,
+      narrative: [
+        `You spent time and financial resources supporting local artists and neighborhood cultural initiatives.`,
+        `Locals appreciated your genuine contribution to the district's creative character.`
+      ]
+    };
+  } else if (actionType === 'clean_streets') {
+    state.needs.energy = Math.max(0, state.needs.energy - 18);
+    advance(state, 90);
+    dist.environmentalQuality = clamp(dist.environmentalQuality + 5, 10, 100);
+    adjustReputation(state, 'community', 5, 'District Sanitation Action');
+    grantExp(state, 14);
+    grantSkillExp(state, 'fitness', 12);
+    const msg = `Pithe spent the afternoon volunteering for ${dist.name} environmental sanitation.`;
+    recordMemory(state, {
+      type: 'district_cleaning',
+      title: msg,
+      entities: ['pithe'],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      visibility: 'public',
+      context: msg
+    });
+    NOTES.push(`Volunteered for ${dist.name} environmental cleanup (+5 Environmental Quality).`);
+    return {
+      title: `Civic Cleanup: ${dist.name}`,
+      narrative: [
+        `You picked up litter, cleaned public benches, and weeded roadside planter boxes across ${dist.name}.`,
+        `The neighborhood feels brighter and more welcoming.`
+      ]
+    };
+  }
+
+  return { error: 'Unknown district action.' };
+}
+
+export function doProjectContribute(state, projectId) {
+  ensurePhase7(state);
+  const proj = state.institutions.projects[projectId];
+  const def = D.COMMUNITY_PROJECTS[projectId];
+  if (!proj || !def) return { error: 'Community project not found.' };
+  if (proj.completed) return { error: 'This community project has already been completed.' };
+
+  if (state.location !== def.location) {
+    return { error: `You must travel to ${D.LOCATIONS[def.location]?.name || def.location} to contribute to this project.` };
+  }
+
+  if (def.costPerContribution && state.money < def.costPerContribution) {
+    return { error: `Project contribution requires ${def.costPerContribution} money.` };
+  }
+  if (state.needs.energy < def.energyPerContribution) {
+    return { error: `You do not have enough energy (requires ${def.energyPerContribution}).` };
+  }
+
+  if (def.costPerContribution) state.money -= def.costPerContribution;
+  state.needs.energy = Math.max(0, state.needs.energy - def.energyPerContribution);
+  advance(state, 120);
+
+  proj.progress = Math.min(proj.targetProgress, proj.progress + 15);
+  proj.contributionsCount = (proj.contributionsCount || 0) + 1;
+  state.institutions.totalContributions = (state.institutions.totalContributions || 0) + 1;
+
+  if (def.skill) grantSkillExp(state, def.skill, 18);
+  grantExp(state, 20);
+  adjustReputation(state, 'community', 6, 'Community Project Effort');
+
+  const dist = state.districts[proj.district];
+  if (dist) {
+    dist.civicDev = clamp(dist.civicDev + 3, 10, 100);
+  }
+
+  if (proj.progress >= proj.targetProgress && !proj.completed) {
+    proj.completed = true;
+    state.institutions.completedProjects.push(proj.id);
+    const compMsg = def.outcomes?.memory || `${proj.name} successfully completed!`;
+    if (dist && def.outcomes) {
+      if (def.outcomes.environmentalQuality) dist.environmentalQuality = clamp(dist.environmentalQuality + def.outcomes.environmentalQuality, 10, 100);
+      if (def.outcomes.commercialDev) dist.commercialDev = clamp(dist.commercialDev + def.outcomes.commercialDev, 10, 100);
+      if (def.outcomes.civicDev) dist.civicDev = clamp(dist.civicDev + def.outcomes.civicDev, 10, 100);
+      if (def.outcomes.culturalActivity) dist.culturalActivity = clamp(dist.culturalActivity + def.outcomes.culturalActivity, 10, 100);
+      if (def.outcomes.reputation) dist.reputation = clamp(dist.reputation + def.outcomes.reputation, 10, 100);
+    }
+    recordMemory(state, {
+      type: 'project_completion',
+      title: `Civic Project Finished: ${proj.name}`,
+      entities: ['pithe'],
+      location: proj.location,
+      importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+      visibility: 'public',
+      context: compMsg
+    });
+    NOTES.push(`Project completed: ${proj.name}!`);
+  }
+
+  checkAchievements(state);
+
+  return {
+    title: `Contributed to ${proj.name}`,
+    narrative: [
+      `You put your skills and resources to work for the community.`,
+      `Project Progress: ${proj.progress}/${proj.targetProgress} (${Math.round((proj.progress / proj.targetProgress) * 100)}%).`
+    ]
+  };
+}
+
+export function doBusinessCollaborate(state, bizId, collabType) {
+  ensurePhase7(state);
+  const biz = state.economy.businesses[bizId];
+  if (!biz) return { error: 'Independent business not found.' };
+
+  if (state.location !== biz.location) {
+    return { error: `You must be present at ${D.LOCATIONS[biz.location]?.name || biz.location} to collaborate.` };
+  }
+
+  if (state.needs.energy < 15) return { error: 'You are too tired for commercial collaboration.' };
+
+  state.needs.energy = Math.max(0, state.needs.energy - 14);
+  advance(state, 90);
+
+  biz.performance = clamp(biz.performance + 6, 10, 100);
+  if (!state.economy.collaborations.includes(bizId)) {
+    state.economy.collaborations.push(bizId);
+  }
+
+  if (biz.ownerNpc) {
+    addRel(state, biz.ownerNpc, 8);
+  }
+
+  grantSkillExp(state, 'negotiation', 15);
+  grantExp(state, 16);
+  adjustReputation(state, 'professional', 5, 'Local Business Collaboration');
+
+  const msg = `Pithe formed a supportive partnership with ${biz.name}.`;
+  recordMemory(state, {
+    type: 'business_partnership',
+    title: msg,
+    entities: ['pithe', biz.ownerNpc].filter(Boolean),
+    location: biz.location,
+    importance: D.MEMORY_IMPORTANCE.NOTABLE,
+    visibility: 'public',
+    context: `Joint commercial collaboration helped stabilize and grow ${biz.name}.`
+  });
+
+  NOTES.push(`Collaborated with ${biz.name} (+6 Performance, Owner Trust increased).`);
+  checkAchievements(state);
+
+  return {
+    title: `Collaboration: ${biz.name}`,
+    narrative: [
+      `You spent the afternoon working closely with the management of ${biz.name}.`,
+      `The enterprise gained marketing reach and operational resilience.`
+    ]
+  };
+}
+
+export function doPhase7EventParticipate(state, eventId) {
+  ensurePhase7(state);
+  const ev = state.livingUniverseSim.activeEvents.find((e) => e.id === Number(eventId));
+  if (!ev) return { error: 'Event not found or already concluded.' };
+
+  if (state.location !== ev.location) {
+    return { error: `You must be at ${D.LOCATIONS[ev.location]?.name || ev.location} to participate.` };
+  }
+  if (ev.playerParticipated) return { error: 'You have already participated in this event.' };
+
+  const opt = ev.playerOption;
+  if (!opt) return { error: 'No player participation option.' };
+
+  if (opt.cost && state.money < opt.cost) return { error: `Requires ${opt.cost} money to participate.` };
+  if (opt.energy && opt.energy < 0 && state.needs.energy < -opt.energy) return { error: 'Not enough energy.' };
+
+  if (opt.cost) state.money -= opt.cost;
+  if (opt.energy) state.needs.energy = clamp(state.needs.energy + opt.energy, 0, 100);
+  advance(state, opt.minutes || 120);
+
+  if (opt.skill && opt.skillExp) grantSkillExp(state, opt.skill, opt.skillExp);
+  if (opt.exp) grantExp(state, opt.exp);
+  if (opt.reputation) {
+    for (const [dom, val] of Object.entries(opt.reputation)) {
+      adjustReputation(state, dom, val, ev.name);
+    }
+  }
+
+  ev.playerParticipated = true;
+
+  recordMemory(state, {
+    type: 'phase7_event_attendance',
+    title: `Pithe participated in ${ev.name}`,
+    entities: ['pithe', ...(ev.participantNpcs || [])],
+    location: ev.location,
+    importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+    visibility: 'public',
+    context: opt.narrative
+  });
+
+  for (const nId of ev.participantNpcs || []) {
+    addRel(state, nId, 6);
+  }
+
+  NOTES.push(`Participated in ${ev.name}!`);
+  checkAchievements(state);
+
+  return {
+    title: ev.name,
+    narrative: [opt.narrative]
   };
 }
 
@@ -3344,6 +3962,10 @@ export function execute(state, action, opts = {}) {
     case 'story_decision': res = doStoryDecision(state, action.storyId, action.choiceId); break;
     case 'story_discover': res = doStoryDiscover(state, action.storyId); break;
     case 'retire_and_succeed': res = retireAndSucceed(state, action.successorId, action.confirmed); break;
+    case 'district_action': res = doDistrictAction(state, action.districtId, action.actionType); break;
+    case 'project_contribute': res = doProjectContribute(state, action.projectId); break;
+    case 'business_collaborate': res = doBusinessCollaborate(state, action.bizId, action.collabType); break;
+    case 'phase7_event_participate': res = doPhase7EventParticipate(state, action.eventId); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
@@ -3662,6 +4284,27 @@ export function checkAchievements(state) {
 
   // 21. dynasty_builder
   if ((state.family?.generation || 1) >= 3) unlock('dynasty_builder');
+
+  // Phase 7 Living Universe Milestones
+  // 22. district_steward (achieved when a district reaches elite tier: reputation >= 92 and culturalActivity >= 92)
+  if (state.districts && Object.values(state.districts).some((d) => d.reputation >= 92 && d.culturalActivity >= 92)) {
+    unlock('district_steward');
+  }
+
+  // 23. civic_architect
+  if (state.institutions?.completedProjects && state.institutions.completedProjects.length >= 1) {
+    unlock('civic_architect');
+  }
+
+  // 24. economic_catalyst
+  if (state.economy?.collaborations && state.economy.collaborations.length >= 2) {
+    unlock('economic_catalyst');
+  }
+
+  // 25. community_anchor
+  if (state.institutions?.totalContributions >= 5) {
+    unlock('community_anchor');
+  }
 }
 
 // ---------------------------------------------------------------- Skill Specialization Selection
