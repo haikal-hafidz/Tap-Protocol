@@ -306,7 +306,7 @@ export function createApp(root, deps) {
   }
 
   function journalView(s) {
-    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
     if (app.journalTab === 'history') {
       const items = [...s.log].reverse();
       return `${tabs}<section class="panel"><h2>Activity history</h2>${items.length ? `<ul class="history">${items.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> <strong>${esc(l.title)}</strong>${l.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}${l.notes.length ? `<small>${esc(l.notes.join(' '))}</small>` : ''}${l.changes.length ? `<small>${esc(l.changes.join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>No activity yet. Things you do in the world are recorded here automatically.</p>'}</section>`;
@@ -317,6 +317,26 @@ export function createApp(root, deps) {
         <p class="hint">A persistent record of your major life achievements, career steps, degrees, marriages, family, and ventures.</p>
         ${chron.length ? `<ul class="history">${chron.map((c) => `<li><div class="attr-top"><strong>${esc(c.title)}</strong><span class="tag">${esc(c.category)}</span></div><small>${esc(c.date)} (Year ${esc(c.year)})</small><p class="story">${esc(c.desc)}</p></li>`).join('')}</ul>` : '<p>No milestones recorded yet. Live your life, find work, earn degrees, and make connections to build your chronicle.</p>'}
       </section>`;
+    }
+    if (app.journalTab === 'world_memory') {
+      const mems = [...(s.memories || [])].reverse();
+      const rumors = mems.filter((m) => m.isRumor && !m.verified);
+      const confirmed = mems.filter((m) => !m.isRumor || m.verified);
+
+      const rumorsHtml = rumors.length
+        ? rumors.map((r) => `<li class="action"><div class="action-main"><strong>${esc(r.title)}</strong> <span class="tag warn">Rumor</span>
+            <p>${esc(r.context)}</p><small>Origin: ${esc(r.location)} | ${esc(r.date)}</small></div>
+            <button class="btn primary" data-action="do" data-kind="verify_rumor" data-id="${r.id}">Investigate & Verify</button></li>`).join('')
+        : '<p>No active unverified rumors circulating right now.</p>';
+
+      const confirmedHtml = confirmed.length
+        ? confirmed.slice(0, 30).map((m) => `<li><div class="attr-top"><strong>${esc(m.title)}</strong> <span class="tag">${esc(m.type)}</span></div>
+            <small>${esc(m.date)} | Location: ${esc(D.LOCATIONS[m.location]?.name || m.location)}</small>
+            <p class="story">${esc(m.context)}</p></li>`).join('')
+        : '<p>No world historical memories recorded yet.</p>';
+
+      return `${tabs}<section class="panel"><h2>Circulating Rumors</h2><ul class="actions">${rumorsHtml}</ul></section>
+        <section class="panel"><h2>Discovered World Memories & History</h2><ul class="history">${confirmedHtml}</ul></section>`;
     }
     const entries = [...s.journal].reverse();
     return `${tabs}<section class="panel"><h2>New entry</h2>
@@ -369,28 +389,54 @@ export function createApp(root, deps) {
 
   function worldView(s) {
     const loc = D.LOCATIONS[s.location];
+    const locEnv = (s.worldLocations && s.worldLocations[s.location]) || { activityLevel: 50, reputation: 50, popularity: 50, history: [] };
     const go = Object.keys(D.LOCATIONS).filter((id) => id !== s.location).map((id) => {
       const p = R.preview(s, { kind: 'travel', to: id });
       return actionCard(D.LOCATIONS[id].name, `${D.LOCATIONS[id].desc} Hours: ${D.LOCATIONS[id].open ? D.LOCATIONS[id].open.label : 'always'}.`, { kind: 'travel', to: id }, p, 'Go');
     }).join('');
-    const npcs = R.npcsHere(s).map((id) => `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong> <span class="tag">${esc(R.relationLabel(s.relations[id] || 0))}</span><p>${esc(D.NPCS[id].role)}. ${esc(D.NPCS[id].desc)}</p></div><button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`).join('');
+    const npcs = R.npcsHere(s).map((id) => {
+      const sim = s.npcSim && s.npcSim[id];
+      const recentMem = sim?.memories?.length ? sim.memories[sim.memories.length - 1].title : null;
+      return `<li class="action"><div class="action-main"><strong>${esc(D.NPCS[id].name)}</strong> <span class="tag">${esc(R.relationLabel(s.relations[id] || 0))}</span>
+        <p>${esc(D.NPCS[id].role)}. ${esc(D.NPCS[id].desc)}</p>
+        ${recentMem ? `<small>Remembers: ${esc(recentMem)}</small>` : ''}</div>
+        <button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`;
+    }).join('');
+
     let talk = '';
     if (app.talkNpc && R.npcLocation(app.talkNpc, s.clock) === s.location) {
       const n = D.NPCS[app.talkNpc];
+      const sim = s.npcSim && s.npcSim[app.talkNpc];
+      const mems = sim?.memories ? [...sim.memories].reverse().slice(0, 3) : [];
       talk = `<section class="panel talk"><div class="report-head"><h2>Talking to ${esc(n.name)}</h2><button class="btn small" data-action="close-talk">Leave conversation</button></div>
+        ${mems.length ? `<div class="sub-head"><p class="hint">Memories with Pithe & world: ${esc(mems.map((m) => m.title).join('; '))}</p></div>` : ''}
         <ul class="actions">${R.topicsFor(s, app.talkNpc).map((t) => {
           const act = { kind: 'talk', npc: app.talkNpc, topic: t.id };
           const p = R.preview(s, act);
           return actionCard(t.label, '', act, p.ok ? p : { ok: false, error: t.disabled || p.error }, 'Say it');
         }).join('')}</ul></section>`;
     }
+
+    // Active emergent events at this location
+    const activeEvents = (s.worldEvents?.active || []).filter((e) => e.location === s.location);
+    const eventsHtml = activeEvents.length
+      ? activeEvents.map((ev) => `<li class="action"><div class="action-main"><strong>${esc(ev.name)}</strong> <span class="tag good">Live Event</span>
+          <p>${esc(ev.desc)}</p>
+          <small>Ends at ${esc(R.formatClock(ev.endClock))}</small></div>
+          ${ev.playerParticipated ? '<span class="tag">Attended</span>' : `<button class="btn primary" data-action="do" data-kind="event_participate" data-id="${ev.id}">${esc(ev.playerOption?.label || 'Participate')}</button>`}</li>`).join('')
+      : '';
+
     const where = Object.keys(D.NPCS).map((id) => {
       const at = R.npcLocation(id, s.clock);
       return `<li><strong>${esc(D.NPCS[id].name)}</strong> (${esc(D.NPCS[id].role)}): ${at ? `now at ${esc(D.LOCATIONS[at].name)}` : 'not around right now'}.<small>${esc(R.scheduleLabel(id))}</small></li>`;
     }).join('');
+
     const ev = R.worldEvents(s);
-    return `<section class="window"><header><h2>${esc(loc.name)}</h2><p class="sub">${esc(R.formatClock(s.clock))}. ${esc(R.periodOf(s.clock))}.</p></header><p>${esc(loc.desc)}</p>${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</section>
+    return `<section class="window"><header><h2>${esc(loc.name)}</h2><p class="sub">${esc(R.formatClock(s.clock))}. ${esc(R.periodOf(s.clock))}.</p></header><p>${esc(loc.desc)}</p>
+      <div class="stats"><div class="stat"><span>Activity</span><b>${locEnv.activityLevel}/100</b></div><div class="stat"><span>Reputation</span><b>${locEnv.reputation}/100</b></div><div class="stat"><span>Popularity</span><b>${locEnv.popularity}/100</b></div></div>
+      ${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</section>
       ${talk}
+      ${eventsHtml ? `<section class="panel"><h2>Happening Now at ${esc(loc.name)}</h2><ul class="actions">${eventsHtml}</ul></section>` : ''}
       <section class="panel"><h2>People here</h2>${npcs ? `<ul class="actions">${npcs}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
       <section class="panel"><h2>Travel</h2><ul class="actions">${go}</ul></section>
       <section class="panel"><h2>Who is where</h2><ul class="plain">${where}</ul><p class="hint">The world only moves when you act. Time stops when you close the game.</p></section>`;

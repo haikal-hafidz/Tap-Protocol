@@ -623,3 +623,214 @@ export const LIFE_STAGES = [
 export function getLifeStage(age) {
   return LIFE_STAGES.find((s) => age >= s.minAge && age <= s.maxAge) || LIFE_STAGES[0];
 }
+
+// ==============================================================================
+// PHASE 3 - WORLD MEMORY & LIVING SIMULATION DATA
+// ==============================================================================
+
+export const MEMORY_IMPORTANCE = {
+  FLEETING: 1,
+  NOTABLE: 2,
+  SIGNIFICANT: 3,
+  MAJOR: 4,
+  HISTORICAL: 5
+};
+
+export const MAX_WORLD_MEMORIES = 250;
+export const MAX_NPC_MEMORIES = 40;
+
+// Base NPC autonomous profiles (routines, personal goals, initial circumstances)
+export const NPC_PROFILES = {
+  mira: {
+    id: 'mira',
+    career: 'Head Archivist & Librarian',
+    employer: 'Harbor Public Library',
+    homeLocation: 'home',
+    interests: ['historical literature', 'classical calligraphy', 'botany'],
+    goal: 'Complete an indexed catalog of rare coastal maritime manuscripts',
+    workplace: 'library',
+    circle: ['teo', 'elena']
+  },
+  teo: {
+    id: 'teo',
+    career: 'Merchant & Stall Proprietor',
+    employer: 'Lantern Market Traders Guild',
+    homeLocation: 'market',
+    interests: ['artisan baking', 'trade routes', 'card games'],
+    goal: 'Expand direct grain sourcing contracts with highland organic farms',
+    workplace: 'market',
+    circle: ['mira', 'dani']
+  },
+  dani: {
+    id: 'dani',
+    career: 'Cafe Owner & Culinary Lead',
+    employer: 'Corner Cafe',
+    homeLocation: 'cafe',
+    interests: ['specialty coffee roasting', 'pastry recipes', 'jazz records'],
+    goal: 'Restore steady foot traffic and turn the cafe into an evening cultural hub',
+    workplace: 'cafe',
+    circle: ['teo', 'chloe']
+  },
+  marcus: {
+    id: 'marcus',
+    career: 'Venture Director',
+    employer: 'Apex Corporation',
+    homeLocation: 'downtown',
+    interests: ['angel investments', 'macroeconomics', 'sailing'],
+    goal: 'Secure seed capital for an ambitious clean-energy tech incubator',
+    workplace: 'downtown',
+    circle: ['elena', 'julian']
+  },
+  elena: {
+    id: 'elena',
+    career: 'Dean of Humanities & Research',
+    employer: 'Metropolitan University',
+    homeLocation: 'university',
+    interests: ['sociology', 'academic philosophy', 'urban development'],
+    goal: 'Publish a landmark collaborative monograph on contemporary urban life',
+    workplace: 'university',
+    circle: ['mira', 'marcus']
+  },
+  chloe: {
+    id: 'chloe',
+    career: 'Senior Systems Architect',
+    employer: 'NovaTech Solutions',
+    homeLocation: 'tech_park',
+    interests: ['distributed algorithms', 'open-source software', 'electronic music'],
+    goal: 'Deploy a resilient decentralized data platform across metropolitan hubs',
+    workplace: 'tech_park',
+    circle: ['dani', 'julian']
+  },
+  julian: {
+    id: 'julian',
+    career: 'Principal Architectural Designer',
+    employer: 'Studio Prisma',
+    homeLocation: 'marina',
+    interests: ['sustainable urbanism', 'minimalist furniture', 'coastal ecology'],
+    goal: 'Win the civic design tender for the Marina promenade revitalization',
+    workplace: 'downtown',
+    circle: ['marcus', 'chloe']
+  }
+};
+
+// Starting inter-NPC relationship network (bonds, affinities, trust, status)
+export const INITIAL_NPC_NETWORK = [
+  { source: 'teo', target: 'dani', status: 'close_friends', affinity: 75, trust: 80, role: 'Long-standing commercial neighbors and breakfast regulars' },
+  { source: 'teo', target: 'mira', status: 'friends', affinity: 60, trust: 65, role: 'Frequent lending library patron and weekly market customer' },
+  { source: 'mira', target: 'elena', status: 'colleagues', affinity: 65, trust: 70, role: 'Academic advisory peers and archival research collaborators' },
+  { source: 'marcus', target: 'elena', status: 'colleagues', affinity: 50, trust: 55, role: 'University venture endowment board members' },
+  { source: 'marcus', target: 'julian', status: 'friends', affinity: 55, trust: 50, role: 'Commercial design patrons and weekend marina acquaintances' },
+  { source: 'chloe', target: 'dani', status: 'friends', affinity: 65, trust: 60, role: 'Daily morning cafe customer and laptop worker' },
+  { source: 'chloe', target: 'julian', status: 'colleagues', affinity: 55, trust: 50, role: 'Collaborating on smart city spatial interface designs' }
+];
+
+// Dynamic location baseline properties and ambient environmental state
+export const INITIAL_LOCATION_STATES = {
+  home: { activityLevel: 25, reputation: 60, popularity: 30, notableHistory: ['Pithe arrived and leased a narrow room above the laundry.'] },
+  library: { activityLevel: 45, reputation: 80, popularity: 50, notableHistory: ['Centennial library holding the municipal historical archives.'] },
+  market: { activityLevel: 80, reputation: 75, popularity: 85, notableHistory: ['Bustling trade venue home to Saturday Lantern Night traditions.'] },
+  cafe: { activityLevel: 65, reputation: 70, popularity: 60, notableHistory: ['Cozy corner spot frequented by artists, writers, and local regulars.'] },
+  downtown: { activityLevel: 90, reputation: 85, popularity: 75, notableHistory: ['Financial heartbeat and corporate nexus of the metropolitan core.'] },
+  university: { activityLevel: 75, reputation: 90, popularity: 70, notableHistory: ['Renowned center for research, academic debate, and student innovation.'] },
+  tech_park: { activityLevel: 70, reputation: 80, popularity: 65, notableHistory: ['Campus of software laboratories, incubators, and startup ventures.'] },
+  marina: { activityLevel: 60, reputation: 85, popularity: 80, notableHistory: ['Scenic coastal district famous for open-air promenades and fresh breezes.'] }
+};
+
+// Emergent world events catalog
+export const EMERGENT_EVENT_TYPES = {
+  book_fair: {
+    id: 'book_fair',
+    name: 'Harbor Book & Archive Fair',
+    location: 'library',
+    cadenceDays: 14,
+    activeHours: [10, 16],
+    participants: ['mira', 'elena'],
+    desc: 'An exhibition of rare manuscripts, local publications, and guest author readings.',
+    playerOption: {
+      label: 'Browse the archival exhibition (1h)',
+      cost: 0,
+      energy: -10,
+      minutes: 60,
+      rewards: { skill: 'research', skillExp: 14, exp: 12 },
+      narrative: 'You browsed historical maps and original trade registers, conversing with local scholars.'
+    },
+    autonomousOutcome: 'The library archive fair concluded with strong community turnout and new rare additions to the collection.'
+  },
+  artisan_tasting: {
+    id: 'artisan_tasting',
+    name: 'Weekend Coffee Cupping & Tasting',
+    location: 'cafe',
+    cadenceDays: 7,
+    activeDays: [0, 6],
+    activeHours: [13, 17],
+    participants: ['dani', 'chloe'],
+    desc: 'Dani hosts an intimate coffee roast tasting featuring single-origin beans and pairing pastries.',
+    playerOption: {
+      label: 'Participate in the cupping flight ($10)',
+      cost: 10,
+      energy: 15,
+      minutes: 45,
+      rewards: { skill: 'cooking', skillExp: 10, exp: 8 },
+      narrative: 'You sampled three distinct roasts with Dani, identifying notes of citrus, dark chocolate, and cardamom.'
+    },
+    autonomousOutcome: 'Dani held an enjoyable weekend tasting; new regulars praised the seasonal single-origin roast.'
+  },
+  founders_mixer: {
+    id: 'founders_mixer',
+    name: 'Innovation & Founders Mixer',
+    location: 'tech_park',
+    cadenceDays: 14,
+    activeDays: [4, 5],
+    activeHours: [17, 20],
+    participants: ['chloe', 'marcus'],
+    desc: 'An open networking session connecting software engineers, designers, and startup investors.',
+    playerOption: {
+      label: 'Network with founders and engineers (2h)',
+      cost: 0,
+      energy: -16,
+      minutes: 120,
+      rewards: { skill: 'conversation', skillExp: 16, exp: 16 },
+      narrative: 'You joined an animated circle discussing distributed systems, product roadmaps, and venture funding.'
+    },
+    autonomousOutcome: 'Engineers and venture leaders shared prototype demos and forged new professional collaborations.'
+  },
+  waterfront_festival: {
+    id: 'waterfront_festival',
+    name: 'Marina Promenade Crafts & Music Festival',
+    location: 'marina',
+    cadenceDays: 21,
+    activeDays: [5, 6],
+    activeHours: [14, 21],
+    participants: ['julian', 'teo'],
+    desc: 'Bayside live acoustic sets, artisanal design booths, and evening promenade strolls.',
+    playerOption: {
+      label: 'Enjoy the waterfront festival (2h)',
+      cost: 15,
+      energy: 10,
+      satiety: 20,
+      minutes: 120,
+      rewards: { skill: 'observation', skillExp: 12, exp: 14 },
+      narrative: 'You walked the sunlit boardwalk, listened to melodic acoustic performances, and admired seaside craft stalls.'
+    },
+    autonomousOutcome: 'The seaside festival brought festive crowds to the promenade and boosted local shop reputations.'
+  },
+  symposium_lecture: {
+    id: 'symposium_lecture',
+    name: 'Metropolitan Public Civic Symposium',
+    location: 'university',
+    cadenceDays: 28,
+    activeDays: [2, 3],
+    activeHours: [15, 18],
+    participants: ['elena', 'marcus'],
+    desc: 'An insightful public debate and keynote lecture addressing the future of sustainable urban centers.',
+    playerOption: {
+      label: 'Attend the symposium lecture (2h)',
+      cost: 0,
+      energy: -12,
+      minutes: 120,
+      rewards: { skill: 'research', skillExp: 15, exp: 15 },
+      narrative: 'You took detailed notes as Dr. Rostova delivered an eloquent lecture on urban social networks.'
+    },
+    autonomousOutcome: 'Dr. Rostova addressed an engaged auditorium, sparking vibrant discussion across academic faculty.'
+  }
+};
