@@ -63,6 +63,7 @@ function weekStart(dateStr) {
 }
 
 // ---------------------------------------------------------------- random (seeded, stored in state)
+function randInt(state, min, max) { return min + Math.floor(rand(state) * (max - min + 1)); }
 function rand(state) {
   state.rng = (state.rng + 0x6D2B79F5) >>> 0;
   let t = state.rng;
@@ -135,6 +136,7 @@ export function createCharacter(o = {}) {
   ensureFamily(state);
   ensureChronicle(state);
   ensureWorldMemory(state);
+  ensurePhase4(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -172,6 +174,7 @@ export function migrateState(s) {
   ensureFamily(s);
   ensureChronicle(s);
   ensureWorldMemory(s);
+  ensurePhase4(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -2151,6 +2154,11 @@ export function execute(state, action, opts = {}) {
     case 'family_action': res = doFamilyAction(state, action.familyType, action.childName); break;
     case 'event_participate': res = doEventParticipate(state, action.id); break;
     case 'verify_rumor': res = verifyRumor(state, action.id); break;
+    case 'choose_specialization': res = doChooseSpecialization(state, action.skillId, action.specId); break;
+    case 'org_join': res = doOrgJoin(state, action.id); break;
+    case 'org_contribute': res = doOrgContribute(state, action.id, action.contribId); break;
+    case 'competition_enter': res = doCompetitionEnter(state, action.id, action.strategyId); break;
+    case 'career_mentorship': res = doCareerMentorship(state, action.npc); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
@@ -2318,4 +2326,494 @@ export function trackerStats(g, today) {
   const last14 = [];
   for (let i = 13; i >= 0; i--) { const d = addDays(today, -i); last14.push({ date: d, done: dates.has(d) }); }
   return { streak, unit, doneNow, total: g.completions.length, last14 };
+}
+
+
+// ==============================================================================
+// PHASE 4 - RPG EXPANSION (PROGRESSION, MASTERY, COMPETITIONS, ORGS, ACHIEVEMENTS)
+// ==============================================================================
+
+export function ensurePhase4(state) {
+  state.specializations = state.specializations || {};
+  state.reputation = state.reputation || {
+    professional: 0,
+    academic: 0,
+    creative: 0,
+    community: 0,
+    athletic: 0
+  };
+  for (const domain of Object.keys(D.REPUTATION_DOMAINS)) {
+    if (typeof state.reputation[domain] !== 'number') state.reputation[domain] = 0;
+  }
+  state.organizations = state.organizations || {
+    memberships: {}, // orgId: { rankId, points, joinedClock, contributionsCount }
+    history: []
+  };
+  state.competitions = state.competitions || {
+    history: [], // entries: { compId, clock, date, rank, placement, prize, strategy }
+    records: {}  // compId: { bestPlacement, goldCount, silverCount, bronzeCount, entriesCount }
+  };
+  state.achievements = state.achievements || {
+    unlocked: {}, // achId: { clock, date }
+    history: []
+  };
+}
+
+export function adjustReputation(state, domain, amount, reason = '') {
+  ensurePhase4(state);
+  if (!state.reputation[domain] && state.reputation[domain] !== 0) state.reputation[domain] = 0;
+  state.reputation[domain] = clamp(state.reputation[domain] + amount, -100, 100);
+  if (amount !== 0) {
+    const domainDef = D.REPUTATION_DOMAINS[domain];
+    const name = domainDef ? domainDef.name : domain;
+    NOTES.push(`${amount > 0 ? '+' : ''}${amount} ${name}${reason ? ` (${reason})` : ''}.`);
+  }
+  checkAchievements(state);
+}
+
+export function getSkillMastery(level) {
+  const miles = D.MASTERY_MILESTONES;
+  let cur = miles[0];
+  for (const m of miles) {
+    if (level >= m.level) cur = m;
+  }
+  return cur;
+}
+
+export function hasSpecialization(state, specId) {
+  ensurePhase4(state);
+  return Object.values(state.specializations).includes(specId);
+}
+
+export function getSkillSpecialization(state, skillId) {
+  ensurePhase4(state);
+  const specId = state.specializations[skillId];
+  if (!specId) return null;
+  const list = D.SKILL_SPECIALIZATIONS[skillId] || [];
+  return list.find((s) => s.id === specId) || null;
+}
+
+export function checkAchievements(state) {
+  ensurePhase4(state);
+  const achs = state.achievements;
+  const c = state.character;
+  const unlock = (id) => {
+    if (achs.unlocked[id]) return;
+    const def = D.ACHIEVEMENTS.find((a) => a.id === id);
+    if (!def) return;
+    achs.unlocked[id] = { clock: state.clock, date: formatDateOnly(state.clock) };
+    achs.history.push({ id, clock: state.clock, date: formatDateOnly(state.clock), name: def.name, category: def.category });
+    recordChronicle(state, {
+      category: 'achievement',
+      title: `Achievement: ${def.name}`,
+      desc: def.desc
+    });
+    NOTES.push(`Achievement Unlocked: ${def.name}!`);
+  };
+
+  // 1. first_specialization
+  if (Object.keys(state.specializations).length > 0) unlock('first_specialization');
+
+  // 2. skill_master
+  if (Object.values(c.skills).some((sk) => sk.level >= D.MAX_SKILL)) unlock('skill_master');
+
+  // 3. multi_disciplined
+  if (Object.values(c.skills).filter((sk) => sk.level >= 5).length >= 4) unlock('multi_disciplined');
+
+  // 4. first_podium & 5. grand_champion & 6. endurance_triumph
+  const chist = state.competitions.history || [];
+  if (chist.some((h) => ['gold', 'silver', 'bronze'].includes(h.placement))) unlock('first_podium');
+  if (chist.some((h) => h.placement === 'gold')) unlock('grand_champion');
+  if (chist.some((h) => h.compId === 'bayside_10k')) unlock('endurance_triumph');
+
+  // 7. guild_initiate & 8. guild_leader & 9. service_record
+  const mems = Object.values(state.organizations.memberships || {});
+  if (mems.length > 0) unlock('guild_initiate');
+  for (const [orgId, m] of Object.entries(state.organizations.memberships || {})) {
+    const odef = D.ORGANIZATIONS[orgId];
+    if (odef && odef.ranks[odef.ranks.length - 1].id === m.rankId) unlock('guild_leader');
+  }
+  const totalContribs = mems.reduce((sum, m) => sum + (m.contributionsCount || 0), 0);
+  if (totalContribs >= 10) unlock('service_record');
+
+  // 10. executive_promotion
+  if (state.career?.currentJob) {
+    const jdef = D.JOBS[state.career.currentJob];
+    if (jdef && jdef.level >= 2) unlock('executive_promotion');
+  }
+
+  // 11. esteemed_reputation
+  if (Object.values(state.reputation).some((v) => v >= 50)) unlock('esteemed_reputation');
+
+  // 12. citywide_respect (all 5 positive >= 15)
+  if (Object.values(state.reputation).every((v) => v >= 15)) unlock('citywide_respect');
+
+  // 13. social_connector (5+ Friendly)
+  const friendlyCount = Object.values(state.relations || {}).filter((v) => v >= 30).length;
+  if (friendlyCount >= 5) unlock('social_connector');
+
+  // 14. independent_founder
+  if ((state.business?.owned || []).length > 0) unlock('independent_founder');
+
+  // 15. scholar_degree
+  if ((state.education?.qualifications || []).some((q) => q.startsWith('deg_'))) unlock('scholar_degree');
+}
+
+// ---------------------------------------------------------------- Skill Specialization Selection
+export function doChooseSpecialization(state, skillId, specId) {
+  ensurePhase4(state);
+  const sk = state.character.skills[skillId];
+  if (!sk) return { error: 'Unknown skill.' };
+  if (sk.level < 5) return { error: 'Specialization requires skill level 5 or higher.' };
+  if (state.specializations[skillId]) return { error: 'Specialization already chosen for this skill.' };
+
+  const list = D.SKILL_SPECIALIZATIONS[skillId] || [];
+  const spec = list.find((s) => s.id === specId);
+  if (!spec) return { error: 'Invalid specialization option.' };
+
+  state.specializations[skillId] = specId;
+  const sdef = D.SKILLS.find((s) => s.id === skillId);
+  NOTES.push(`Specialized in ${spec.name} for ${sdef.name}.`);
+  recordChronicle(state, {
+    category: 'mastery',
+    title: `Specialization: ${spec.name}`,
+    desc: `Dedicated advanced practice toward ${spec.name}. ${spec.desc}`
+  });
+
+  checkAchievements(state);
+  return {
+    title: `Specialization: ${spec.name}`,
+    narrative: [
+      `You made a conscious commitment to specialize your ${sdef.name} studies.`,
+      spec.flavor,
+      `Perk activated: ${spec.desc}`
+    ]
+  };
+}
+
+// ---------------------------------------------------------------- Organizations System
+export function doOrgJoin(state, orgId) {
+  ensurePhase4(state);
+  const org = D.ORGANIZATIONS[orgId];
+  if (!org) return { error: 'Unknown organization.' };
+  if (state.organizations.memberships[orgId]) return { error: 'You are already an active member of this organization.' };
+  if (state.location !== org.location) {
+    return { error: `Must be at ${D.LOCATIONS[org.location]?.name || org.location} to join.` };
+  }
+  if (state.money < org.membershipCost) {
+    return { error: `Membership dues require ${org.membershipCost} money.` };
+  }
+
+  // Requirements check
+  if (org.requirements) {
+    if (org.requirements.skills) {
+      for (const [sk, lvl] of Object.entries(org.requirements.skills)) {
+        if ((state.character.skills[sk]?.level || 0) < lvl) {
+          const skName = D.SKILLS.find((s) => s.id === sk)?.name || sk;
+          return { error: `Requires ${skName} Level ${lvl} or higher.` };
+        }
+      }
+    }
+    if (org.requirements.repDomain && org.requirements.minRep) {
+      if ((state.reputation[org.requirements.repDomain] || 0) < org.requirements.minRep) {
+        const domName = D.REPUTATION_DOMAINS[org.requirements.repDomain]?.name || org.requirements.repDomain;
+        return { error: `Requires at least ${org.requirements.minRep} ${domName}.` };
+      }
+    }
+  }
+
+  transact(state, { amount: -org.membershipCost, category: 'dues', desc: `Initiation dues for ${org.name}` });
+  const initialRank = org.ranks[0];
+  state.organizations.memberships[orgId] = {
+    rankId: initialRank.id,
+    points: 0,
+    joinedClock: state.clock,
+    contributionsCount: 0
+  };
+  state.organizations.history.push({
+    orgId, clock: state.clock, date: formatDateOnly(state.clock),
+    event: `Joined as ${initialRank.title}`
+  });
+
+  recordChronicle(state, {
+    category: 'community',
+    title: `Inducted: ${org.name}`,
+    desc: `Admitted as ${initialRank.title}. ${org.desc}`
+  });
+
+  // NPC affinity bonus for members
+  for (const npcId of org.npcMembers) {
+    addRel(state, npcId, 8);
+    recordNpcMemory(state, npcId, {
+      title: `Pithe joined ${org.name}`,
+      context: `Welcomed Pithe as a fellow member into ${org.name}.`,
+      importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+      emotionalValence: 0.8
+    });
+  }
+
+  adjustReputation(state, org.requirements?.repDomain || 'community', 5, 'Induction');
+  checkAchievements(state);
+
+  return {
+    title: `Inducted: ${org.name}`,
+    narrative: [
+      `You paid the membership dues and signed the charter of ${org.name}.`,
+      `You hold the rank of ${initialRank.title}. Perk: ${initialRank.perk}`
+    ]
+  };
+}
+
+export function doOrgContribute(state, orgId, contribId) {
+  ensurePhase4(state);
+  const mem = state.organizations.memberships[orgId];
+  if (!mem) return { error: 'You are not a member of this organization.' };
+  const org = D.ORGANIZATIONS[orgId];
+  if (!org) return { error: 'Unknown organization.' };
+  if (state.location !== org.location) {
+    return { error: `Must be at ${D.LOCATIONS[org.location]?.name || org.location} to contribute.` };
+  }
+  const contrib = org.contributions.find((c) => c.id === contribId);
+  if (!contrib) return { error: 'Unknown contribution activity.' };
+
+  if (state.needs.energy < -contrib.energy) {
+    return { error: `Not enough energy (need ${-contrib.energy}).` };
+  }
+
+  state.needs.energy = Math.max(0, state.needs.energy + contrib.energy);
+  state.needs.satiety = Math.max(0, state.needs.satiety - 6);
+  advance(state, contrib.minutes);
+
+  mem.points += contrib.contribPoints;
+  mem.contributionsCount = (mem.contributionsCount || 0) + 1;
+
+  if (contrib.skill) {
+    grantSkillExp(state, contrib.skill, 12);
+  }
+  grantExp(state, 15);
+  adjustReputation(state, contrib.repType, contrib.repVal, `${org.name} service`);
+
+  // Check promotion
+  let promoted = null;
+  const currentRankIdx = org.ranks.findIndex((r) => r.id === mem.rankId);
+  const nextRank = org.ranks[currentRankIdx + 1];
+  if (nextRank && mem.points >= nextRank.reqContrib) {
+    mem.rankId = nextRank.id;
+    promoted = nextRank;
+    state.organizations.history.push({
+      orgId, clock: state.clock, date: formatDateOnly(state.clock),
+      event: `Promoted to ${nextRank.title}`
+    });
+    recordChronicle(state, {
+      category: 'community',
+      title: `Promoted: ${nextRank.title}`,
+      desc: `Elevated to ${nextRank.title} within ${org.name} after demonstrating exemplary service.`
+    });
+    NOTES.push(`Promoted to ${nextRank.title} in ${org.name}!`);
+    recordMemory(state, {
+      type: 'social',
+      title: `Pithe elevated to ${nextRank.title} in ${org.name}`,
+      location: org.location,
+      importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+      context: `The steering board of ${org.name} voted to promote Pithe to ${nextRank.title}.`
+    });
+  }
+
+  checkAchievements(state);
+
+  return {
+    title: `${org.name}: Contribution`,
+    narrative: [
+      `You completed: ${contrib.name}.`,
+      `You earned ${contrib.contribPoints} contribution standing points (Total: ${mem.points} pts).`,
+      promoted ? `Congratulations! You were promoted to ${promoted.title}. Perk: ${promoted.perk}` : `Current standing: ${org.ranks.find((r) => r.id === mem.rankId).title}.`
+    ]
+  };
+}
+
+// ---------------------------------------------------------------- Competitions Engine
+export function isCompetitionActive(comp, clock) {
+  const day = weekdayOf(clock); // 0=Sun, 1=Mon, ..., 6=Sat
+  const h = hourOf(clock);
+  if (!comp.activeDays.includes(day)) return false;
+  if (h < comp.activeHours[0] || h >= comp.activeHours[1]) return false;
+  return true;
+}
+
+export function doCompetitionEnter(state, compId, strategyId) {
+  ensurePhase4(state);
+  const comp = D.COMPETITIONS[compId];
+  if (!comp) return { error: 'Unknown competition.' };
+  if (state.location !== comp.location) {
+    return { error: `Must be at ${D.LOCATIONS[comp.location]?.name || comp.location} to enter.` };
+  }
+  if (!isCompetitionActive(comp, state.clock)) {
+    return { error: `${comp.name} is not currently running. Check scheduled days and hours.` };
+  }
+  const strat = comp.strategies.find((s) => s.id === strategyId);
+  if (!strat) return { error: 'Choose a competition strategy.' };
+  if (state.money < comp.entryFee) {
+    return { error: `Entry registration fee requires ${comp.entryFee} money.` };
+  }
+  if (state.needs.energy < strat.energyCost) {
+    return { error: `Not enough energy for this strategy (need ${strat.energyCost}).` };
+  }
+
+  // Deduct entry fee
+  transact(state, { amount: -comp.entryFee, category: 'competition', desc: `Registration for ${comp.name}` });
+  state.needs.energy = Math.max(0, state.needs.energy - strat.energyCost);
+  state.needs.satiety = Math.max(0, state.needs.satiety - 15);
+  advance(state, 180); // 3 hours duration
+
+  // Calculate player performance score
+  const skLevel = state.character.skills[comp.primarySkill]?.level || 0;
+  const attrVal = state.character.attributes[comp.secondaryAttr] || 1;
+  const healthMod = state.needs.health >= 70 ? 1.1 : state.needs.health < 40 ? 0.7 : 1.0;
+
+  // Specialization bonus
+  let specBonus = 0;
+  const spec = getSkillSpecialization(state, comp.primarySkill);
+  if (spec && (spec.bonuses.compBonus === comp.primarySkill || spec.bonuses.compBonus === comp.secondaryAttr)) {
+    specBonus = 4;
+  }
+
+  // Strategy roll
+  let stratRoll = 0;
+  if (strat.risk === 'low') {
+    stratRoll = 10 + (randInt(state, 1, 6));
+  } else if (strat.risk === 'medium') {
+    stratRoll = 6 + (randInt(state, 1, 12));
+  } else if (strat.risk === 'high') {
+    stratRoll = (randInt(state, 1, 20));
+  }
+
+  const playerScore = Math.round(((skLevel * 4) + (attrVal * 3) + specBonus + stratRoll) * healthMod);
+
+  // Simulate NPC scores
+  const npcScores = comp.npcCompetitors.map((npcId) => {
+    const prof = D.NPC_PROFILES[npcId];
+    const baseScore = 28 + randInt(state, 0, 18);
+    return { npcId, name: D.NPCS[npcId]?.name || npcId, score: baseScore };
+  });
+
+  const allCompetitors = [
+    { isPlayer: true, name: state.character.name, score: playerScore },
+    ...npcScores.map((n) => ({ isPlayer: false, name: n.name, score: n.score, npcId: n.npcId }))
+  ];
+  allCompetitors.sort((a, b) => b.score - a.score);
+
+  const playerRankIdx = allCompetitors.findIndex((c) => c.isPlayer);
+  let placement = 'participant';
+  let prizeKey = 'participant';
+  if (playerRankIdx === 0) { placement = 'gold'; prizeKey = 'gold'; }
+  else if (playerRankIdx === 1) { placement = 'silver'; prizeKey = 'silver'; }
+  else if (playerRankIdx === 2) { placement = 'bronze'; prizeKey = 'bronze'; }
+
+  const prize = comp.prizes[prizeKey];
+  if (prize.cash > 0) {
+    transact(state, { amount: prize.cash, category: 'competition_prize', desc: `Prize award from ${comp.name}` });
+  }
+  if (prize.item) {
+    addItem(state, prize.item, 1);
+  }
+  grantSkillExp(state, comp.primarySkill, 20);
+  grantExp(state, prize.exp);
+  adjustReputation(state, comp.domain, prize.rep, comp.name);
+
+  // Update records
+  state.competitions.history.push({
+    compId,
+    clock: state.clock,
+    date: formatDateOnly(state.clock),
+    placement,
+    rank: playerRankIdx + 1,
+    score: playerScore,
+    strategy: strat.label,
+    prizeTitle: prize.title
+  });
+
+  const rec = state.competitions.records[compId] || { bestPlacement: 'participant', goldCount: 0, silverCount: 0, bronzeCount: 0, entriesCount: 0 };
+  rec.entriesCount = (rec.entriesCount || 0) + 1;
+  if (placement === 'gold') rec.goldCount = (rec.goldCount || 0) + 1;
+  if (placement === 'silver') rec.silverCount = (rec.silverCount || 0) + 1;
+  if (placement === 'bronze') rec.bronzeCount = (rec.bronzeCount || 0) + 1;
+  if (placement === 'gold' || (placement === 'silver' && rec.bestPlacement !== 'gold') || (placement === 'bronze' && !['gold', 'silver'].includes(rec.bestPlacement))) {
+    rec.bestPlacement = placement;
+  }
+  state.competitions.records[compId] = rec;
+
+  // Record World Memory and NPC memories
+  recordChronicle(state, {
+    category: 'competition',
+    title: `${comp.name}: Rank #${playerRankIdx + 1} (${placement.toUpperCase()})`,
+    desc: `Competed in ${comp.name} employing '${strat.label}'. Finished in placement: ${placement.toUpperCase()} with score ${playerScore}.`
+  });
+
+  recordMemory(state, {
+    type: 'cultural',
+    title: `${comp.name} concluded: ${allCompetitors[0].name} takes First Place`,
+    location: comp.location,
+    importance: placement === 'gold' ? D.MEMORY_IMPORTANCE.MAJOR : D.MEMORY_IMPORTANCE.SIGNIFICANT,
+    context: `The ${comp.name} concluded today. ${allCompetitors[0].name} claimed victory, while Pithe finished at Rank #${playerRankIdx + 1}.`
+  });
+
+  for (const npc of npcScores) {
+    recordNpcMemory(state, npc.npcId, {
+      title: `Competed against Pithe in ${comp.name}`,
+      context: `Competed against Pithe in ${comp.name}. Pithe placed #${playerRankIdx + 1} with score ${playerScore}.`,
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      emotionalValence: playerRankIdx < allCompetitors.findIndex((c) => c.npcId === npc.npcId) ? 0.3 : 0.6
+    });
+  }
+
+  checkAchievements(state);
+
+  const standingSummary = allCompetitors.map((c, i) => `#${i + 1} ${c.name} (${c.score} pts)`).join(', ');
+
+  return {
+    title: `${comp.name} Results: ${placement.toUpperCase()}`,
+    narrative: [
+      `You stepped onto the field using your strategy: ${strat.label}.`,
+      `Final Standings: ${standingSummary}.`,
+      `You secured Rank #${playerRankIdx + 1} (${prize.title})!`,
+      `Rewards awarded: +${prize.exp} Character EXP, +20 ${D.SKILLS.find((s) => s.id === comp.primarySkill)?.name} EXP, ${prize.cash > 0 ? `+${prize.cash} money, ` : ''}+${prize.rep} ${comp.domain} reputation.`
+    ]
+  };
+}
+
+// ---------------------------------------------------------------- Enhanced Career Development & Performance
+export function doCareerMentorship(state, npcId) {
+  ensurePhase4(state);
+  ensureCareer(state);
+  if (!state.career.currentJob) return { error: 'You must be currently employed to seek professional mentorship.' };
+  if (state.location !== 'downtown' && state.location !== 'tech_park' && state.location !== 'university') {
+    return { error: 'Professional mentorship sessions take place at Downtown, Tech Park, or University.' };
+  }
+  const rel = state.relations[npcId] || 0;
+  if (rel < 20) return { error: `${D.NPCS[npcId]?.name || 'This person'} does not know you well enough to provide career mentorship (need Familiar relation).` };
+  if (state.needs.energy < 20) return { error: 'Not enough energy for an intensive mentorship session.' };
+
+  state.needs.energy = Math.max(0, state.needs.energy - 18);
+  advance(state, 90);
+
+  const boost = 8 + randInt(state, 2, 6);
+  state.career.performance = Math.min(100, (state.career.performance || 70) + boost);
+  grantExp(state, 20);
+  adjustReputation(state, 'professional', 4, 'Executive Mentorship');
+  addRel(state, npcId, 6);
+
+  recordNpcMemory(state, npcId, {
+    title: `Mentored Pithe on professional career roadmap`,
+    context: `Conducted an insightful 1-on-1 career mentorship review with Pithe.`,
+    importance: D.MEMORY_IMPORTANCE.NOTABLE,
+    emotionalValence: 0.7
+  });
+
+  return {
+    title: `Mentorship: ${D.NPCS[npcId]?.name || npcId}`,
+    narrative: [
+      `You sat down with ${D.NPCS[npcId]?.name} to discuss leadership tactics, technical execution, and industry navigation.`,
+      `Your work performance rose by +${boost} points (Current Performance: ${state.career.performance}/100).`
+    ]
+  };
 }

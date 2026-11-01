@@ -834,3 +834,465 @@ export const EMERGENT_EVENT_TYPES = {
     autonomousOutcome: 'Dr. Rostova addressed an engaged auditorium, sparking vibrant discussion across academic faculty.'
   }
 };
+
+// ==============================================================================
+// PHASE 4 - ADVANCED PROGRESSION, MASTERY & RPG EXPANSION DATA
+// ==============================================================================
+
+// Context-sensitive reputation domains
+export const REPUTATION_DOMAINS = {
+  professional: { id: 'professional', name: 'Professional Reputation', desc: 'Standing among corporate executives, clients, and industry peers.' },
+  academic: { id: 'academic', name: 'Academic Reputation', desc: 'Recognition across university researchers, scholars, and intellectual institutions.' },
+  creative: { id: 'creative', name: 'Creative Reputation', desc: 'Prestige among visual artists, designers, authors, and cultural critics.' },
+  community: { id: 'community', name: 'Community Reputation', desc: 'Trust, warmth, and goodwill among local neighborhood residents and civic volunteers.' },
+  athletic: { id: 'athletic', name: 'Athletic Reputation', desc: 'Acclaim in competitive sports, distance marathons, and conditioning leagues.' }
+};
+
+// Skill Specializations: Available at Skill Level 5+
+export const SKILL_SPECIALIZATIONS = {
+  programming: [
+    {
+      id: 'systems_architect',
+      skillId: 'programming',
+      name: 'Systems Architect',
+      desc: 'Focus on distributed backends, robust architectures, and fault tolerance.',
+      reqSkillLevel: 5,
+      bonuses: { workPerfMod: 1.25, energyCostMod: 0.85, compBonus: 'programming' },
+      flavor: 'You design structural software backbones that withstand heavy throughput.'
+    },
+    {
+      id: 'creative_technologist',
+      skillId: 'programming',
+      name: 'Creative Technologist',
+      desc: 'Merge algorithmic mastery with visual interactivity, game mechanics, and design.',
+      reqSkillLevel: 5,
+      bonuses: { designSynergy: true, expGainMod: 1.2, compBonus: 'creativity' },
+      flavor: 'You transform code into expressive digital artwork and interactive experiences.'
+    }
+  ],
+  writing: [
+    {
+      id: 'investigative_journalist',
+      skillId: 'writing',
+      name: 'Investigative Journalist',
+      desc: 'Probe deep civic narratives, verify rumors with factual rigor, and publish revelations.',
+      reqSkillLevel: 5,
+      bonuses: { rumorVerifyBonus: 2, communityRepMod: 1.3, compBonus: 'writing' },
+      flavor: 'Your prose uncovers truth beneath polished public statements.'
+    },
+    {
+      id: 'literary_author',
+      skillId: 'writing',
+      name: 'Literary Author',
+      desc: 'Craft profound prose, evocative essays, and memorable longform fiction.',
+      reqSkillLevel: 5,
+      bonuses: { creativeRepMod: 1.4, journalExpMod: 1.5, compBonus: 'creativity' },
+      flavor: 'Your words evoke vivid resonance in the hearts of discerning readers.'
+    }
+  ],
+  design: [
+    {
+      id: 'design_systems_lead',
+      skillId: 'design',
+      name: 'Design Systems Lead',
+      desc: 'Standardize scalable typography, modular design tokens, and systematic layouts.',
+      reqSkillLevel: 5,
+      bonuses: { workPerfMod: 1.25, salaryBonus: 0.15, compBonus: 'design' },
+      flavor: 'You bring unified geometric elegance and accessible clarity to complex interfaces.'
+    },
+    {
+      id: 'visual_storyteller',
+      skillId: 'design',
+      name: 'Visual Storyteller',
+      desc: 'Craft striking branding narratives, evocative posters, and bespoke artisanal illustrations.',
+      reqSkillLevel: 5,
+      bonuses: { creativeRepMod: 1.35, clientJoyMod: 1.2, compBonus: 'creativity' },
+      flavor: 'Your visual compositions captivate audiences with distinctive emotional weight.'
+    }
+  ],
+  research: [
+    {
+      id: 'empirical_analyst',
+      skillId: 'research',
+      name: 'Empirical Data Analyst',
+      desc: 'Extract actionable foresight from dense numerical registers, archives, and spreadsheets.',
+      reqSkillLevel: 5,
+      bonuses: { academicRepMod: 1.3, intelligenceGainMod: 1.25, compBonus: 'research' },
+      flavor: 'You identify hidden quantitative patterns where others see only noise.'
+    },
+    {
+      id: 'archival_historian',
+      skillId: 'research',
+      name: 'Archival Historian',
+      desc: 'Specialize in maritime chronicles, institutional histories, and forgotten manuscripts.',
+      reqSkillLevel: 5,
+      bonuses: { libraryBenefit: true, memoryDiscoveryBonus: 2, compBonus: 'perception' },
+      flavor: 'You preserve the forgotten stories of the harbor and city archives.'
+    }
+  ],
+  cooking: [
+    {
+      id: 'executive_chef',
+      skillId: 'cooking',
+      name: 'Artisan Executive Chef',
+      desc: 'Command professional kitchen timing, complex flavor balance, and banquet pacing.',
+      reqSkillLevel: 5,
+      bonuses: { satietyEfficiency: 1.35, businessFoodBonus: 1.25, compBonus: 'cooking' },
+      flavor: 'You elevate local harbor harvests into sublime culinary creations.'
+    },
+    {
+      id: 'nutritional_scientist',
+      skillId: 'cooking',
+      name: 'Nutritional Specialist',
+      desc: 'Balance macronutrients, recovery botanicals, and sustained endurance recipes.',
+      reqSkillLevel: 5,
+      bonuses: { healthRegenMod: 1.4, energyDrainMod: 0.85, compBonus: 'fitness' },
+      flavor: 'Your balanced meals fuel stamina and rapid physiological recovery.'
+    }
+  ],
+  fitness: [
+    {
+      id: 'marathon_athlete',
+      skillId: 'fitness',
+      name: 'Endurance Marathoner',
+      desc: 'Hone cardiovascular resilience, lung capacity, and steady pacing across long distances.',
+      reqSkillLevel: 5,
+      bonuses: { travelEnergyMod: 0.75, athleticRepMod: 1.4, compBonus: 'fitness' },
+      flavor: 'You stride across city miles with steady breathing and calm focus.'
+    },
+    {
+      id: 'strength_conditioner',
+      skillId: 'fitness',
+      name: 'Strength Conditioner',
+      desc: 'Master power kinetics, isometric resistance, and physical resilience under strain.',
+      reqSkillLevel: 5,
+      bonuses: { collapseResist: true, physicalTaskMod: 1.3, compBonus: 'strength' },
+      flavor: 'Your hardened physique shrugs off physical fatigue and heavy labor.'
+    }
+  ],
+  negotiation: [
+    {
+      id: 'venture_dealmaker',
+      skillId: 'negotiation',
+      name: 'Venture Dealmaker',
+      desc: 'Structure high-stakes equity contracts, commercial alliances, and commercial leases.',
+      reqSkillLevel: 5,
+      bonuses: { businessProfitMod: 1.2, professionalRepMod: 1.3, compBonus: 'negotiation' },
+      flavor: 'You negotiate win-win corporate agreements with persuasive composure.'
+    },
+    {
+      id: 'community_mediator',
+      skillId: 'negotiation',
+      name: 'Community Mediator',
+      desc: 'Resolve neighborhood disputes, broker tenant pacts, and build social consensus.',
+      reqSkillLevel: 5,
+      bonuses: { trustGainMod: 1.35, communityRepMod: 1.4, compBonus: 'communication' },
+      flavor: 'You dissolve tensions and foster mutual understanding among conflicting parties.'
+    }
+  ],
+  conversation: [
+    {
+      id: 'diplomatic_orator',
+      skillId: 'conversation',
+      name: 'Diplomatic Orator',
+      desc: 'Command public stages, articulate shared visions, and inspire community action.',
+      reqSkillLevel: 5,
+      bonuses: { publicSpeakingBonus: 1.4, influenceGainMod: 1.25, compBonus: 'conversation' },
+      flavor: 'Your spoken words carry authority, warmth, and persuasive grace.'
+    },
+    {
+      id: 'confidant_counselor',
+      skillId: 'conversation',
+      name: 'Empathetic Counselor',
+      desc: 'Provide patient counsel, active listening, and sincere emotional sanctuary.',
+      reqSkillLevel: 5,
+      bonuses: { npcFriendshipBonus: 1.5, empathyGainMod: 1.3, compBonus: 'empathy' },
+      flavor: 'People readily open their deepest thoughts and personal ambitions to you.'
+    }
+  ],
+  observation: [
+    {
+      id: 'forensic_analyst',
+      skillId: 'observation',
+      name: 'Forensic Analyst',
+      desc: 'Detect subtle discrepancies in accounts, contracts, and forensic evidence.',
+      reqSkillLevel: 5,
+      bonuses: { deceptionDetect: true, perceptionGainMod: 1.3, compBonus: 'observation' },
+      flavor: 'Nothing slips past your keen scrutiny and contextual deduction.'
+    },
+    {
+      id: 'environmental_scout',
+      skillId: 'observation',
+      name: 'Environmental Scout',
+      desc: 'Read atmospheric shifts, urban micro-currents, and quiet neighborhood trends.',
+      reqSkillLevel: 5,
+      bonuses: { exploreLootMod: 1.4, eventDiscoverBonus: 1.3, compBonus: 'perception' },
+      flavor: 'You sense the quiet rhythms of the city and its hidden alleyways.'
+    }
+  ]
+};
+
+// Skill Mastery Milestones
+export const MASTERY_MILESTONES = [
+  { level: 1, title: 'Novice', perk: 'Fundamental familiarity with practice routines.' },
+  { level: 3, title: 'Apprentice', perk: 'Energy consumption reduced by 10% for related activities.' },
+  { level: 5, title: 'Journeyman', perk: 'Unlocks advanced skill specializations and competition eligibility.' },
+  { level: 8, title: 'Specialist', perk: 'Gain +20% bonus EXP and greater prestige in domain competitions.' },
+  { level: 10, title: 'Master', perk: 'Legendary proficiency. Mentorship ability and signature mastery perk unlocked.' }
+];
+
+// Organizations & Communities Catalog
+export const ORGANIZATIONS = {
+  tech_guild: {
+    id: 'tech_guild',
+    name: 'Metropolitan Tech Innovators Guild',
+    location: 'tech_park',
+    industry: 'Technology',
+    desc: 'An influential coalition of software architects, roboticists, and tech entrepreneurs fostering modern engineering standards.',
+    membershipCost: 75,
+    requirements: { skills: { programming: 3 }, repDomain: 'professional', minRep: 10 },
+    ranks: [
+      { id: 'affiliate', title: 'Guild Affiliate', perk: 'Access to Tech Park workshops and hardware labs.' },
+      { id: 'fellow', title: 'Fellow Engineer', reqContrib: 50, perk: '+15% programming practice EXP and peer mentorship.' },
+      { id: 'chair', title: 'Steering Committee Chair', reqContrib: 150, perk: 'Ability to sponsor tech hackathons and direct grant funding.' }
+    ],
+    npcMembers: ['chloe', 'marcus'],
+    contributions: [
+      { id: 'code_sprint', name: 'Contribute to Open Core Software Sprint (3h)', minutes: 180, energy: -20, skill: 'programming', contribPoints: 15, repType: 'professional', repVal: 8 },
+      { id: 'mentorship', name: 'Mentor Junior Coders (2h)', minutes: 120, energy: -15, skill: 'conversation', contribPoints: 10, repType: 'community', repVal: 6 }
+    ]
+  },
+  arts_collective: {
+    id: 'arts_collective',
+    name: 'Studio Prisma Arts Collective',
+    location: 'downtown',
+    industry: 'Creative Arts',
+    desc: 'A vibrant collective of graphic designers, authors, and exhibition artists celebrating contemporary metropolitan culture.',
+    membershipCost: 50,
+    requirements: { skills: { design: 2, writing: 2 }, repDomain: 'creative', minRep: 10 },
+    ranks: [
+      { id: 'contributor', title: 'Associate Artisan', perk: 'Access to printmaking presses and collective studios.' },
+      { id: 'resident', title: 'Resident Artist', reqContrib: 50, perk: 'Opportunity to exhibit original work at Downtown galleries.' },
+      { id: 'curator', title: 'Lead Curator', reqContrib: 150, perk: 'Curate city-wide art exhibits and command 20% higher design fees.' }
+    ],
+    npcMembers: ['julian', 'dani'],
+    contributions: [
+      { id: 'gallery_install', name: 'Assist Gallery Curation & Installation (3h)', minutes: 180, energy: -18, skill: 'design', contribPoints: 15, repType: 'creative', repVal: 8 },
+      { id: 'zine_editorial', name: 'Draft Collective Cultural Zine (2h)', minutes: 120, energy: -14, skill: 'writing', contribPoints: 10, repType: 'creative', repVal: 6 }
+    ]
+  },
+  academic_society: {
+    id: 'academic_society',
+    name: 'Metropolitan Philosophical & Research Society',
+    location: 'university',
+    industry: 'Academia',
+    desc: 'A prestigious intellectual fraternity dedicated to archival science, sociological critique, and public debate.',
+    membershipCost: 60,
+    requirements: { skills: { research: 3 }, repDomain: 'academic', minRep: 10 },
+    ranks: [
+      { id: 'scholar_member', title: 'Corresponding Scholar', perk: 'Full access to restricted university archival vaults.' },
+      { id: 'fellow_academic', title: 'Senior Research Fellow', reqContrib: 50, perk: 'Co-publish collaborative monographs with tenured faculty.' },
+      { id: 'dean_honorary', title: 'Distinguished Academic Chair', reqContrib: 150, perk: 'Direct academic symposium lectures and advisory boards.' }
+    ],
+    npcMembers: ['elena', 'mira'],
+    contributions: [
+      { id: 'manuscript_review', name: 'Peer Review Archival Submissions (3h)', minutes: 180, energy: -20, skill: 'research', contribPoints: 15, repType: 'academic', repVal: 8 },
+      { id: 'public_lecture', name: 'Host Public Academic Discussion (2h)', minutes: 120, energy: -15, skill: 'conversation', contribPoints: 10, repType: 'academic', repVal: 6 }
+    ]
+  },
+  merchants_union: {
+    id: 'merchants_union',
+    name: 'Harbor Merchants & Producers Guild',
+    location: 'market',
+    industry: 'Commerce',
+    desc: 'The historic guild of stallholders, culinary artisans, and coastal exporters coordinating fair trade and festival markets.',
+    membershipCost: 40,
+    requirements: { skills: { negotiation: 2 }, repDomain: 'community', minRep: 10 },
+    ranks: [
+      { id: 'apprentice_trader', title: 'Registered Trader', perk: 'Discounted market stall fees and early morning delivery slots.' },
+      { id: 'master_merchant', title: 'Master Merchant', reqContrib: 50, perk: '10% wholesale discount on all market purchases.' },
+      { id: 'guildmaster', title: 'Guildmaster of Trade', reqContrib: 150, perk: 'Supervise Lantern Night events and arbitrate harbor contracts.' }
+    ],
+    npcMembers: ['teo', 'dani'],
+    contributions: [
+      { id: 'market_steward', name: 'Steward Market Logistics & Security (3h)', minutes: 180, energy: -22, skill: 'observation', contribPoints: 15, repType: 'community', repVal: 8 },
+      { id: 'supply_negotiate', name: 'Negotiate Bulk Regional Grain Pact (2h)', minutes: 120, energy: -15, skill: 'negotiation', contribPoints: 10, repType: 'professional', repVal: 6 }
+    ]
+  },
+  athletic_league: {
+    id: 'athletic_league',
+    name: 'Bayside Coastal Athletics & Rowing Club',
+    location: 'marina',
+    industry: 'Sports & Athletics',
+    desc: 'A storied seaside sporting club fostering endurance runners, rowers, and outdoor enthusiasts along the bay.',
+    membershipCost: 45,
+    requirements: { skills: { fitness: 3 }, repDomain: 'athletic', minRep: 10 },
+    ranks: [
+      { id: 'club_runner', title: 'Club Athlete', perk: 'Access to bayside gym facilities, recovery baths, and coaching.' },
+      { id: 'pace_leader', title: 'Pacemaker & Captain', reqContrib: 50, perk: 'Bonus stamina recovery (+10% Energy efficiency in fitness).' },
+      { id: 'club_champion', title: 'President of Coastal Athletics', reqContrib: 150, perk: 'Host official city marathons and lead premier regatta teams.' }
+    ],
+    npcMembers: ['teo', 'julian'],
+    contributions: [
+      { id: 'course_marshal', name: 'Marshal Coastal Trail & Safety (3h)', minutes: 180, energy: -25, skill: 'fitness', contribPoints: 15, repType: 'athletic', repVal: 8 },
+      { id: 'youth_coaching', name: 'Coach Junior Bayside Runners (2h)', minutes: 120, energy: -18, skill: 'fitness', contribPoints: 10, repType: 'community', repVal: 6 }
+    ]
+  }
+};
+
+// Competitions & Challenges Catalog
+export const COMPETITIONS = {
+  bayside_10k: {
+    id: 'bayside_10k',
+    name: 'Marina Grand Coastal 10K Marathon',
+    location: 'marina',
+    cadenceDays: 14,
+    activeDays: [0, 6], // Weekend
+    activeHours: [8, 14],
+    entryFee: 20,
+    domain: 'athletic',
+    primarySkill: 'fitness',
+    secondaryAttr: 'endurance',
+    desc: 'An arduous 10-kilometer endurance road race along the windswept coastal cliffs of the Marina Promenade.',
+    npcCompetitors: ['teo', 'julian'],
+    strategies: [
+      { id: 'steady_pace', label: 'Steady Pacing (Balanced: High endurance check)', energyCost: 35, difficulty: 6, risk: 'low' },
+      { id: 'aggressive_breakaway', label: 'Aggressive Breakaway (High speed: Requires agility & strength)', energyCost: 55, difficulty: 8, risk: 'high' },
+      { id: 'calculated_surge', label: 'Calculated Final Surge (Patience & perception)', energyCost: 45, difficulty: 7, risk: 'medium' }
+    ],
+    prizes: {
+      gold: { cash: 200, exp: 60, rep: 25, item: 'tonic', title: 'Marina Coastal Marathon Gold Medalist' },
+      silver: { cash: 100, exp: 40, rep: 15, title: 'Marina Coastal Marathon Runner-Up' },
+      bronze: { cash: 50, exp: 25, rep: 10, title: 'Marina Coastal Marathon Bronze Finisher' },
+      participant: { cash: 0, exp: 15, rep: 4, title: 'Bayside 10K Finisher' }
+    }
+  },
+  hackathon: {
+    id: 'hackathon',
+    name: 'Tech Park Metropolitan 24h Hackathon',
+    location: 'tech_park',
+    cadenceDays: 21,
+    activeDays: [5, 6], // Saturday & Sunday
+    activeHours: [9, 21],
+    entryFee: 25,
+    domain: 'professional',
+    primarySkill: 'programming',
+    secondaryAttr: 'intelligence',
+    desc: 'An intense computational engineering hackathon pitting elite developers to build robust open prototypes.',
+    npcCompetitors: ['chloe', 'marcus'],
+    strategies: [
+      { id: 'resilient_architecture', label: 'Fault-Tolerant Distributed Core (Focus on stability)', energyCost: 40, difficulty: 7, risk: 'low' },
+      { id: 'cutting_edge_ai', label: 'Novel Algorithmic Innovation (Ambitious prototype)', energyCost: 60, difficulty: 9, risk: 'high' },
+      { id: 'slick_product_ux', label: 'Full-Stack Polished MVP (Balanced coding & design)', energyCost: 45, difficulty: 7, risk: 'medium' }
+    ],
+    prizes: {
+      gold: { cash: 350, exp: 80, rep: 30, title: 'Tech Park Hackathon Grand Champion' },
+      silver: { cash: 180, exp: 50, rep: 18, title: 'Hackathon Innovation Runner-Up' },
+      bronze: { cash: 90, exp: 30, rep: 10, title: 'Hackathon Bronze Laureate' },
+      participant: { cash: 0, exp: 20, rep: 5, title: 'Hackathon Project Exhibitor' }
+    }
+  },
+  culinary_cup: {
+    id: 'culinary_cup',
+    name: 'Corner Cafe Barista & Culinary Championship',
+    location: 'cafe',
+    cadenceDays: 14,
+    activeDays: [0, 6], // Weekend
+    activeHours: [11, 18],
+    entryFee: 15,
+    domain: 'creative',
+    primarySkill: 'cooking',
+    secondaryAttr: 'adaptability',
+    desc: 'An esteemed live tasting duel assessing artisanal coffee extraction, balance, and dessert presentation.',
+    npcCompetitors: ['dani', 'teo'],
+    strategies: [
+      { id: 'classic_perfection', label: 'Artisanal Classic Technique (Pure precision)', energyCost: 30, difficulty: 6, risk: 'low' },
+      { id: 'avant_garde_fusion', label: 'Experimental Botanical Infusion (Bold culinary risk)', energyCost: 50, difficulty: 8, risk: 'high' },
+      { id: 'balanced_harmony', label: 'Harmonious Flavor Flight (Balanced palate)', energyCost: 40, difficulty: 7, risk: 'medium' }
+    ],
+    prizes: {
+      gold: { cash: 220, exp: 65, rep: 25, item: 'bread', title: 'Culinary Master Cup Winner' },
+      silver: { cash: 120, exp: 40, rep: 15, title: 'Culinary Cup Silver Medalist' },
+      bronze: { cash: 60, exp: 25, rep: 8, title: 'Culinary Cup Bronze Finisher' },
+      participant: { cash: 0, exp: 15, rep: 4, title: 'Culinary Tasting Participant' }
+    }
+  },
+  academic_debate: {
+    id: 'academic_debate',
+    name: 'Metropolitan University Public Discourse Debate',
+    location: 'university',
+    cadenceDays: 28,
+    activeDays: [2, 3], // Midweek
+    activeHours: [14, 20],
+    entryFee: 10,
+    domain: 'academic',
+    primarySkill: 'research',
+    secondaryAttr: 'willpower',
+    desc: 'A formal parliamentary debate tournament challenging rhetoric, factual synthesis, and cross-examination.',
+    npcCompetitors: ['elena', 'mira'],
+    strategies: [
+      { id: 'empirical_defense', label: 'Empirical Historical Evidence (Unimpeachable citations)', energyCost: 35, difficulty: 7, risk: 'low' },
+      { id: 'rhetorical_cross', label: 'Aggressive Cross-Examination (High philosophical rigor)', energyCost: 50, difficulty: 8, risk: 'high' },
+      { id: 'socratic_synthesis', label: 'Socratic Dialogue & Empathy (Engaging discourse)', energyCost: 40, difficulty: 7, risk: 'medium' }
+    ],
+    prizes: {
+      gold: { cash: 250, exp: 75, rep: 30, title: 'Dean Discourse Debate Champion' },
+      silver: { cash: 140, exp: 45, rep: 18, title: 'Debate Tournament Finalist' },
+      bronze: { cash: 70, exp: 25, rep: 10, title: 'Debate Tournament Semifinalist' },
+      participant: { cash: 0, exp: 15, rep: 4, title: 'Debate Participant' }
+    }
+  },
+  design_showcase: {
+    id: 'design_showcase',
+    name: 'Downtown Studio Prisma Annual Design Gala',
+    location: 'downtown',
+    cadenceDays: 28,
+    activeDays: [4, 5], // Fri/Sat
+    activeHours: [13, 19],
+    entryFee: 20,
+    domain: 'creative',
+    primarySkill: 'design',
+    secondaryAttr: 'creativity',
+    desc: 'A showcase of branding portfolios, architectural models, and visual installations juried by studio directors.',
+    npcCompetitors: ['julian', 'chloe'],
+    strategies: [
+      { id: 'minimalist_rigor', label: 'Systematic Structural Modernism (Immaculate craftsmanship)', energyCost: 35, difficulty: 6, risk: 'low' },
+      { id: 'provocative_spectacle', label: 'Provocative Multimedia Installation (Radical creativity)', energyCost: 55, difficulty: 9, risk: 'high' },
+      { id: 'human_centered', label: 'Emotive Human-Centered Design (Deep user connection)', energyCost: 45, difficulty: 7, risk: 'medium' }
+    ],
+    prizes: {
+      gold: { cash: 300, exp: 75, rep: 30, title: 'Prisma Design Gala Grand Laureate' },
+      silver: { cash: 160, exp: 45, rep: 18, title: 'Prisma Design Gala Silver Award' },
+      bronze: { cash: 80, exp: 25, rep: 10, title: 'Prisma Design Gala Bronze Award' },
+      participant: { cash: 0, exp: 15, rep: 4, title: 'Design Gala Exhibitor' }
+    }
+  }
+};
+
+// Achievements & Life Milestones Catalog
+export const ACHIEVEMENTS = [
+  // Mastery & Progression
+  { id: 'first_specialization', category: 'Mastery', name: 'Chosen Path', desc: 'Unlock and adopt your first skill specialization.', icon: 'progress', hidden: false },
+  { id: 'skill_master', category: 'Mastery', name: 'Master of Craft', desc: 'Reach maximum Level 10 in any skill discipline.', icon: 'progress', hidden: false },
+  { id: 'multi_disciplined', category: 'Mastery', name: 'Polymath in the Making', desc: 'Reach Level 5 in at least four distinct skills.', icon: 'progress', hidden: false },
+
+  // Competitions & Challenges
+  { id: 'first_podium', category: 'Competitions', name: 'Podium Finish', desc: 'Win a Gold, Silver, or Bronze medal in an official city competition.', icon: 'career', hidden: false },
+  { id: 'grand_champion', category: 'Competitions', name: 'Grand Champion', desc: 'Earn first place (Gold) in any premier competition.', icon: 'career', hidden: false },
+  { id: 'endurance_triumph', category: 'Competitions', name: 'Coastal Strider', desc: 'Complete the Marina Grand Coastal 10K Marathon.', icon: 'career', hidden: false },
+
+  // Organizations & Communities
+  { id: 'guild_initiate', category: 'Organizations', name: 'Civic Member', desc: 'Join an established professional guild or community collective.', icon: 'people', hidden: false },
+  { id: 'guild_leader', category: 'Organizations', name: 'Pillar of the Community', desc: 'Ascend to the highest leadership tier in an organization.', icon: 'people', hidden: false },
+  { id: 'service_record', category: 'Organizations', name: 'Demonstrated Dedication', desc: 'Complete 10 organization contribution projects.', icon: 'people', hidden: false },
+
+  // Professional & Career Mastery
+  { id: 'executive_promotion', category: 'Career', name: 'Corporate Elevation', desc: 'Attain a Level 2 or Level 3 executive promotion in your career.', icon: 'career', hidden: false },
+  { id: 'esteemed_reputation', category: 'Reputation', name: 'Distinguished Renown', desc: 'Attain 50 or higher reputation in any specialized domain.', icon: 'world', hidden: false },
+  { id: 'citywide_respect', category: 'Reputation', name: 'Citywide Eminence', desc: 'Maintain positive reputation across all five social domains simultaneously.', icon: 'world', hidden: true },
+
+  // Emergence & Discovery
+  { id: 'social_connector', category: 'Social', name: 'Heart of the Quarter', desc: 'Build Friendly or higher relationships with at least 5 metropolitan residents.', icon: 'people', hidden: false },
+  { id: 'independent_founder', category: 'Enterprise', name: 'Self-Made Visionary', desc: 'Found and operate an enterprise generating steady revenue.', icon: 'properties', hidden: false },
+  { id: 'scholar_degree', category: 'Academics', name: 'University Graduate', desc: 'Complete a full Bachelor degree curriculum at Metropolitan University.', icon: 'education', hidden: false }
+];
