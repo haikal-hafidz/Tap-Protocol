@@ -12,6 +12,8 @@ const MORE_PAGES = [
   ['education', 'Education & Courses', 'University degrees and vocational certificates.'],
   ['finances', 'Finances & Banking', 'Personal ledger, bank accounts, and savings.'],
   ['properties', 'Property & Business', 'Real estate ownership and business enterprises.'],
+  ['competitions', 'Competitions & Contests', 'Athletic races, engineering hackathons, and creative galas.'],
+  ['organizations', 'Guilds & Organizations', 'Professional guilds, arts collectives, and civic associations.'],
   ['tracker', 'Tracker', 'Real-life habits and goals.'],
   ['quests', 'Quests', 'Jobs and their deadlines.'],
   ['inventory', 'Inventory', 'What you carry, and the market stall.'],
@@ -20,7 +22,7 @@ const MORE_PAGES = [
 const HOME_TABS = [['people', 'People', 'Your connections', 'people'], ['family', 'Family', 'Your inner circle', 'family'], ['personal', 'Personal', 'Your real life', 'personal']];
 const TITLES = {
   dashboard: 'Home', world: 'World', journal: 'Journal', character: 'Progress', more: 'More',
-  career: 'Career', education: 'Education', finances: 'Finances', properties: 'Properties & Business',
+  career: 'Career', education: 'Education', finances: 'Finances', properties: 'Properties & Business', competitions: 'Competitions', organizations: 'Organizations',
   tracker: 'Tracker', quests: 'Quests', inventory: 'Inventory', settings: 'Settings'
 };
 // Page heading copy (UX Session 4). Descriptive only; nothing here is game data.
@@ -34,6 +36,8 @@ const HEADINGS = {
   education: ['Academics & Skills', 'University programs, vocational credentials, and study.'],
   finances: ['Ledger & Accounts', 'Personal finances, banking transactions, and expense records.'],
   properties: ['Assets & Ventures', 'Residential housing, commercial real estate, and business operations.'],
+  competitions: ['Contests & Events', 'Scheduled tournaments, endurance races, and skill challenges.'],
+  organizations: ['Guilds & Societies', 'Civic memberships, rank progression, and community projects.'],
   tracker: ['Real life', 'Your real-life habits, goals and one-off tasks.'],
   quests: ['Objectives', 'Jobs, deadlines and rewards.'],
   inventory: ['Belongings', 'What you carry, and the market stall.'],
@@ -60,7 +64,9 @@ const ICON = {
   career: svg('<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M9 7V4h6v3M4 12h16"/>'),
   education: svg('<path d="M12 3l10 5-10 5-10-5z"/><path d="M6 10.5v5c0 2 3 3.5 6 3.5s6-1.5 6-3.5v-5"/><path d="M22 8v6"/>'),
   finances: svg('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h2"/>'),
-  properties: svg('<path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h2M13 10h2M9 14h2M13 14h2"/>')
+  properties: svg('<path d="M3 21h18M5 21V7l7-4 7 4v14M9 10h2M13 10h2M9 14h2M13 14h2"/>'),
+  competitions: svg('<path d="M6 9H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h2M18 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-2M6 3h12v7a6 6 0 0 1-12 0V3zM9 21h6M12 16v5"/>'),
+  organizations: svg('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>')
 };
 const NAV_ICON = { dashboard: 'home', world: 'world', journal: 'journal', character: 'progress', more: 'more' };
 const navOwner = (view) => MORE_PAGES.some((m) => m[0] === view) ? 'more' : view;
@@ -280,15 +286,40 @@ export function createApp(root, deps) {
     const skills = D.SKILLS.map((k) => {
       const sk = c.skills[k.id];
       const need = sk.level >= D.MAX_SKILL ? 0 : R.skillNeed(sk.level);
-      return `<li class="skill"><div class="attr-top"><span>${k.name}</span><b>Level ${sk.level}</b></div>${bar(need ? sk.exp : 1, need || 1, '', k.name + ' skill')}<small>${need ? `${sk.exp}/${need} EXP. ` : 'Maximum. '}Trains ${esc(D.ATTRIBUTES.find((a) => a.id === k.attr).name)}. ${esc(k.desc)}</small></li>`;
+      const mastery = R.getSkillMastery(sk.level);
+      const spec = R.getSkillSpecialization(s, k.id);
+      const availableSpecs = D.SKILL_SPECIALIZATIONS[k.id] || [];
+      const specButtons = (!spec && sk.level >= 5 && availableSpecs.length)
+        ? availableSpecs.map((sp) => `<div class="action-main"><small><strong>${esc(sp.name)}</strong>: ${esc(sp.desc)}</small> <button class="btn small primary" data-action="do" data-kind="choose_specialization" data-skill-id="${k.id}" data-spec-id="${sp.id}">Adopt Path</button></div>`).join('')
+        : '';
+
+      return `<li class="skill">
+        <div class="attr-top"><span>${k.name}</span><b>Level ${sk.level} (${mastery.title})</b></div>
+        ${bar(need ? sk.exp : 1, need || 1, '', k.name + ' skill')}
+        <small>${need ? `${sk.exp}/${need} EXP. ` : 'Maximum. '}Trains ${esc(D.ATTRIBUTES.find((a) => a.id === k.attr).name)}. ${esc(k.desc)}</small>
+        <p class="meta"><span class="chip">Mastery: ${esc(mastery.perk)}</span></p>
+        ${spec ? `<p class="meta"><span class="chip good">Specialization: ${esc(spec.name)} - ${esc(spec.desc)}</span></p>` : specButtons ? `<div class="sub-head"><p class="hint">Level 5 Reached. Choose your specialization path:</p>${specButtons}</div>` : ''}
+      </li>`;
     }).join('');
+
+    const repMeters = Object.entries(D.REPUTATION_DOMAINS).map(([dom, def]) => {
+      const val = (s.reputation && s.reputation[dom]) || 0;
+      return `<div class="stat"><dt>${esc(def.name)}</dt><dd>${val >= 0 ? '+' : ''}${val}/100</dd></div>`;
+    }).join('');
+
+    const achs = s.achievements?.history || [];
+    const achsHtml = achs.length
+      ? `<ul class="history">${achs.map((a) => `<li><div class="attr-top"><strong>${esc(a.name)}</strong> <span class="tag good">${esc(a.category)}</span></div><small>Earned: ${esc(a.date)}</small></li>`).join('')}</ul>`
+      : '<p>No achievements earned yet. Explore the world, master skills, and enter competitions to unlock achievements.</p>';
     const recent = s.log.filter((l) => l.changes.some((x) => /EXP|level|training|to \d+$/.test(x))).slice(-6).reverse();
     return `<section class="hero window" aria-label="Character overview"><div class="hero-top"><div><div class="eyebrow">Character overview</div><h2>${esc(c.name)}</h2><p>Age ${c.age}. Hardcore.</p></div><span class="level">Level ${c.level}</span></div>
       <p class="appearance">${esc(c.appearance || 'No appearance description yet.')}</p>
       <div class="meter">${bar(c.exp, R.expNeed(c.level), 'exp', 'EXP')}</div><div class="small">${c.exp} / ${R.expNeed(c.level)} EXP</div>
       <dl class="facts stats"><div class="stat"><dt>Background</dt><dd>${esc(bg.name)}</dd></div><div class="stat"><dt>Trait</dt><dd>${esc(tr.name)}</dd></div><div class="stat"><dt>EXP</dt><dd>${c.exp}/${R.expNeed(c.level)}</dd></div><div class="stat"><dt>Collapses</dt><dd>${s.stats.collapses}</dd></div></dl></section>
       <section class="panel"><h2>Attributes</h2><p class="hint">A skill level-up adds training to its attribute. The attribute rises when training equals its current value.</p><div class="cols3">${attrs}</div></section>
-      <section class="panel"><h2>Skills</h2><ul class="skills">${skills}</ul></section>
+      <section class="panel"><h2>Reputation & Standing</h2><p class="hint">Your standing in the world reflects your professional performance, competition results, and community service.</p><dl class="facts stats">${repMeters}</dl></section>
+      <section class="panel"><h2>Skills & Specializations</h2><ul class="skills">${skills}</ul></section>
+      <section class="panel"><h2>Earned Achievements</h2>${achsHtml}</section>
       <section class="panel"><h2>Recent progression</h2>${recent.length ? `<ul class="history">${recent.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> ${esc(l.title)}<small>${esc(l.changes.filter((x) => !x.startsWith('Time ') && !x.startsWith('Energy') && !x.startsWith('Satiety') && !x.startsWith('Health')).join('; '))}</small></li>`).join('')}</ul>` : '<p>No progression yet.</p>'}</section>
       `;
   }
@@ -591,10 +622,105 @@ export function createApp(root, deps) {
       <section class="panel"><h2>Found a New Business</h2><ul class="actions">${ventures}</ul></section>`;
   }
 
+
+  function competitionsView(s) {
+    R.ensurePhase4(s);
+    const comps = Object.values(D.COMPETITIONS);
+    const history = [...(s.competitions.history || [])].reverse().slice(0, 15);
+
+    const cards = comps.map((c) => {
+      const active = R.isCompetitionActive(c, s.clock);
+      const isHere = s.location === c.location;
+      const rec = s.competitions.records[c.id] || { bestPlacement: 'none', entriesCount: 0 };
+      const canAfford = s.money >= c.entryFee;
+
+      const stratOptions = c.strategies.map((st) => {
+        const canEnergy = s.needs.energy >= st.energyCost;
+        return `<div class="action"><div class="action-main"><strong>${esc(st.label)}</strong>
+          <small>Energy Cost: ${st.energyCost} | Risk: ${st.risk.toUpperCase()}</small></div>
+          <button class="btn ${active && isHere && canAfford && canEnergy ? 'primary' : ''}" data-action="do" data-kind="competition_enter" data-id="${c.id}" data-strategy-id="${st.id}" ${active && isHere && canAfford && canEnergy ? '' : 'disabled'}>Enter (${c.entryFee})</button></div>`;
+      }).join('');
+
+      return `<section class="panel">
+        <div class="attr-top"><strong>${esc(c.name)}</strong> <span class="tag ${active ? 'good' : 'muted'}">${active ? 'Live Now' : 'Scheduled'}</span></div>
+        <p>${esc(c.desc)} Location: <strong>${esc(D.LOCATIONS[c.location]?.name || c.location)}</strong></p>
+        <p class="meta"><span class="chip">Domain: ${esc(c.domain)}</span> <span class="chip">Primary Skill: ${esc(c.primarySkill)}</span> <span class="chip">Fee: ${c.entryFee} money</span></p>
+        <p><small>Your Record: ${rec.bestPlacement.toUpperCase()} (Entries: ${rec.entriesCount}) | Competitors: ${c.npcCompetitors.map((id) => D.NPCS[id]?.name || id).join(', ')}</small></p>
+        ${!isHere ? `<p class="why">You must travel to ${esc(D.LOCATIONS[c.location]?.name || c.location)} to participate.</p>` : ''}
+        ${isHere && !active ? `<p class="why">Tournament inactive right now. Runs on scheduled days between ${c.activeHours[0]}:00 and ${c.activeHours[1]}:00.</p>` : ''}
+        <div class="actions">${stratOptions}</div>
+      </section>`;
+    }).join('');
+
+    const historyHtml = history.length
+      ? `<ul class="history">${history.map((h) => `<li><span class="when">${esc(R.formatClock(h.clock))}</span> <strong>${esc(D.COMPETITIONS[h.compId]?.name || h.compId)}</strong> <span class="tag ${h.placement === 'gold' ? 'good' : h.placement === 'silver' ? 'good' : 'warn'}">${esc(h.placement.toUpperCase())}</span> - Rank #${h.rank} (${esc(h.prizeTitle)})</li>`).join('')}</ul>`
+      : '<p>No competition attempts recorded yet.</p>';
+
+    return `<div class="cols">
+      <section class="panel"><h2>Metropolitan Tournament Circuit</h2>
+        <p class="hint">Test your demonstrated skills against skilled local residents and rivals in official city contests. Pacing and strategy matter.</p>
+      </section></div>
+      ${cards}
+      <section class="panel"><h2>Past Tournament Record</h2>${historyHtml}</section>`;
+  }
+
+  function organizationsView(s) {
+    R.ensurePhase4(s);
+    const orgs = Object.values(D.ORGANIZATIONS);
+    const mems = s.organizations.memberships || {};
+
+    const orgCards = orgs.map((org) => {
+      const mem = mems[org.id];
+      const isHere = s.location === org.location;
+      const canAfford = s.money >= org.membershipCost;
+
+      if (mem) {
+        const curRank = org.ranks.find((r) => r.id === mem.rankId) || org.ranks[0];
+        const curRankIdx = org.ranks.findIndex((r) => r.id === mem.rankId);
+        const nextRank = org.ranks[curRankIdx + 1];
+
+        const contribsHtml = org.contributions.map((c) => {
+          const canEnergy = s.needs.energy >= -c.energy;
+          return `<div class="action"><div class="action-main"><strong>${esc(c.name)}</strong>
+            <small>Energy: ${c.energy} | Standing: +${c.contribPoints} pts | Rewards: +${c.repVal} ${c.repType} rep</small></div>
+            <button class="btn ${isHere && canEnergy ? 'primary' : ''}" data-action="do" data-kind="org_contribute" data-id="${org.id}" data-contrib-id="${c.id}" ${isHere && canEnergy ? '' : 'disabled'}>Contribute</button></div>`;
+        }).join('');
+
+        return `<section class="panel">
+          <div class="attr-top"><strong>${esc(org.name)}</strong> <span class="tag good">Member: ${esc(curRank.title)}</span></div>
+          <p>${esc(org.desc)} Headquarters: <strong>${esc(D.LOCATIONS[org.location]?.name || org.location)}</strong></p>
+          <p>Active Perk: <em>${esc(curRank.perk)}</em></p>
+          <p>Standing: <strong>${mem.points}</strong> contribution points ${nextRank ? `(${nextRank.reqContrib - mem.points} pts needed for ${nextRank.title})` : '(Highest Leadership Rank Achieved)'}</p>
+          ${!isHere ? `<p class="why">You must be at ${esc(D.LOCATIONS[org.location]?.name || org.location)} to perform group contribution duties.</p>` : ''}
+          <h3>Contribution Projects</h3>
+          <div class="actions">${contribsHtml}</div>
+        </section>`;
+      }
+
+      return `<section class="panel">
+        <div class="attr-top"><strong>${esc(org.name)}</strong> <span class="tag">Prospect</span></div>
+        <p>${esc(org.desc)}</p>
+        <p class="meta"><span class="chip">HQ: ${esc(D.LOCATIONS[org.location]?.name || org.location)}</span> <span class="chip">Dues: ${org.membershipCost} money</span></p>
+        <p><small>Affiliated Residents: ${org.npcMembers.map((id) => D.NPCS[id]?.name || id).join(', ')}</small></p>
+        <div class="row">
+          <button class="btn ${isHere && canAfford ? 'primary' : ''}" data-action="do" data-kind="org_join" data-id="${org.id}" ${isHere && canAfford ? '' : 'disabled'}>Join ${esc(org.name)} (${org.membershipCost})</button>
+        </div>
+        ${!isHere ? `<p class="why">Visit ${esc(D.LOCATIONS[org.location]?.name || org.location)} to submit your membership pledge.</p>` : ''}
+      </section>`;
+    }).join('');
+
+    return `<div class="cols">
+      <section class="panel"><h2>Guilds, Collectives & Societies</h2>
+        <p class="hint">Join civic associations and professional guilds to collaborate with like-minded residents, unlock unique privileges, and assume leadership roles.</p>
+      </section></div>
+      ${orgCards}`;
+  }
+
+
   function moreView() {
     const row = (id) => { const m = MORE_PAGES.find((x) => x[0] === id); return listCard(m[0], m[1], m[2]); };
     return `<div class="cols">
-      <section class="panel"><h2>Life & Enterprise</h2>${['career', 'education', 'finances', 'properties'].map(row).join('')}</section>
+      <section class="panel"><h2>Life & Enterprise</h2>${['career', 'education', 'finances', 'properties', 'competitions', 'organizations'].map(row).join('')}</section>
       <section class="panel"><h2>Daily Life & System</h2>${['tracker', 'quests', 'inventory', 'settings'].map(row).join('')}</section>
     </div>`;
   }
@@ -645,7 +771,7 @@ export function createApp(root, deps) {
       dashboard: dashboardView, character: characterView, journal: journalView,
       tracker: trackerView, world: worldView, quests: questsView, inventory: inventoryView,
       settings: settingsView, more: moreView, career: careerView, education: educationView,
-      finances: financesView, properties: propertiesView
+      finances: financesView, properties: propertiesView, competitions: competitionsView, organizations: organizationsView
     };
     const body = (viewFns[app.view] || dashboardView)(s);
     const here = navOwner(app.view);
@@ -758,7 +884,7 @@ export function createApp(root, deps) {
   function readAction(el) {
     const d = el.dataset;
     const a = { kind: d.kind };
-    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName']) if (d[k] !== undefined) a[k] = d[k];
+    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId']) if (d[k] !== undefined) a[k] = d[k];
     return a;
   }
 
