@@ -141,6 +141,7 @@ export function createCharacter(o = {}) {
   ensurePhase6(state);
   ensurePhase7(state);
   ensurePhase8(state);
+  ensureExpansionState(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -183,6 +184,7 @@ export function migrateState(s) {
   ensurePhase6(s);
   ensurePhase7(s);
   ensurePhase8(s);
+  ensureExpansionState(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -4999,4 +5001,87 @@ export function generatePersonalBiography(state) {
   state.narrativeArchive.biographyEntries = bio;
   state.narrativeArchive.lastCompiledClock = state.clock;
   return bio;
+}
+
+// ============================================================================
+// EXPANSION: PERKS & EQUIPMENT RULES & INTEGRATION
+// ============================================================================
+export function ensureExpansionState(state) {
+  if (!state.character) return;
+  if (!state.character.avatar) {
+    state.character.avatar = {
+      skinTone: 'warm_beige',
+      faceShape: 'oval',
+      hairstyle: 'side_part',
+      hairColor: 'espresso',
+      eyes: 'focused',
+      eyebrows: 'arched',
+      nose: 'straight',
+      mouth: 'smile',
+      clothing: 'turtleneck',
+      accessories: 'round_glasses',
+      bodyType: 'medium'
+    };
+  }
+  if (!state.character.perks) {
+    state.character.perks = [];
+  }
+  if (!state.character.equipment) {
+    state.character.equipment = {
+      outfit: null,
+      accessory: null,
+      tool: null
+    };
+  }
+  if (!state.minigames) {
+    state.minigames = {
+      records: {},
+      dailyPlays: {}
+    };
+  }
+}
+
+export function hasPerk(state, perkId) {
+  ensureExpansionState(state);
+  return state.character.perks.includes(perkId);
+}
+
+export function buyPerk(state, perkId) {
+  ensureExpansionState(state);
+  const perk = D.PURCHASABLE_PERKS[perkId];
+  if (!perk) return { ok: false, error: 'Perk not found.' };
+  if (state.character.perks.includes(perkId)) return { ok: false, error: `You have already unlocked ${perk.name}.` };
+  if (state.character.level < (perk.minLevel || 1)) {
+    return { ok: false, error: `Requires Character Level ${perk.minLevel}.` };
+  }
+  if (state.money < perk.cost) {
+    return { ok: false, error: `Requires ${perk.cost} Money (you have ${state.money}).` };
+  }
+  state.money -= perk.cost;
+  state.character.perks.push(perkId);
+  return { ok: true, perk, message: `Acquired perk: ${perk.name}!` };
+}
+
+export function equipItem(state, itemId) {
+  ensureExpansionState(state);
+  const def = D.ITEMS[itemId];
+  if (!def || def.type !== 'equipment' || !def.slot) {
+    return { ok: false, error: 'Item cannot be equipped.' };
+  }
+  if (!state.inventory[itemId] || state.inventory[itemId] <= 0) {
+    return { ok: false, error: `You do not own ${def.name}.` };
+  }
+  state.character.equipment[def.slot] = itemId;
+  return { ok: true, itemId, slot: def.slot, message: `Equipped ${def.name}.` };
+}
+
+export function unequipItem(state, slot) {
+  ensureExpansionState(state);
+  if (!state.character.equipment[slot]) {
+    return { ok: false, error: `No item equipped in ${slot}.` };
+  }
+  const prev = state.character.equipment[slot];
+  state.character.equipment[slot] = null;
+  const def = D.ITEMS[prev];
+  return { ok: true, slot, prev, message: `Unequipped ${def ? def.name : slot}.` };
 }

@@ -6,7 +6,7 @@
 // If any file fails to download, the install fails and the old version stays active and intact.
 // The new version waits until the player accepts the update prompt (or closes all tabs), then old caches are deleted.
 
-const CACHE_VERSION = '7bc5b3bb4038';
+const CACHE_VERSION = 'd20deaf4eacf';
 const CACHE_PREFIX = 'tap-protocol-';
 const CACHE = CACHE_PREFIX + CACHE_VERSION;
 
@@ -16,13 +16,17 @@ const PRECACHE = [
   'index.html',
   'manifest.webmanifest',
   'css/style.css',
+  'js/avatar.js',
   'js/cloud-ui.js',
   'js/cloud.js',
   'js/config.js',
   'js/data.js',
   'js/main.js',
+  'js/map.js',
+  'js/minigames.js',
   'js/pwa.js',
   'js/rules.js',
+  'js/scenes.js',
   'js/storage.js',
   'js/sync.js',
   'js/ui.js',

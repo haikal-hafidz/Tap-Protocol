@@ -2995,3 +2995,437 @@ export const BIOGRAPHY_CATEGORIES = {
 };
 
 Object.assign(ACTIVITIES, PHASE8_ACTIVITIES);
+
+// ============================================================================
+// EXPANSION: PURCHASABLE PERKS & EQUIPMENT SYSTEM
+// ============================================================================
+export const PURCHASABLE_PERKS = {
+  quick_learner: {
+    id: 'quick_learner',
+    name: 'Quick Learner',
+    category: 'Lifestyle',
+    cost: 50,
+    minLevel: 1,
+    desc: 'Sharper cognitive routines. Increases Character EXP and Skill EXP gained from all activities by +15%.',
+    effect: { expBonus: 0.15, skillExpBonus: 0.15 }
+  },
+  efficient_routine: {
+    id: 'efficient_routine',
+    name: 'Efficient Routine',
+    category: 'Lifestyle',
+    cost: 75,
+    minLevel: 2,
+    desc: 'Optimized transit and morning regimen. Energy consumed by travel and routine chores reduced by 20%.',
+    effect: { energySave: 0.20 }
+  },
+  social_butterfly: {
+    id: 'social_butterfly',
+    name: 'Social Butterfly',
+    category: 'Social',
+    cost: 90,
+    minLevel: 2,
+    desc: 'Natural warmth and social confidence. Trust points gained from conversations and gifts increased by +30%.',
+    effect: { relBonus: 0.30 }
+  },
+  organized_life: {
+    id: 'organized_life',
+    name: 'Organized Life',
+    category: 'Exploration',
+    cost: 110,
+    minLevel: 3,
+    desc: 'Methodical inventory habits. Maximum items and belongings carried without burden expanded.',
+    effect: { inventoryBonus: 10 }
+  },
+  local_insider: {
+    id: 'local_insider',
+    name: 'Local Insider',
+    category: 'Economic',
+    cost: 130,
+    minLevel: 3,
+    desc: 'Keen eye for neighborhood bargains. All market and vendor purchases cost 10% less.',
+    effect: { discount: 0.10 }
+  },
+  early_bird: {
+    id: 'early_bird',
+    name: 'Early Bird',
+    category: 'Physical',
+    cost: 85,
+    minLevel: 2,
+    desc: 'Thrives in the morning hours (06:00 to 11:00). All activities performed in the morning yield +20% EXP.',
+    effect: { morningBonus: 0.20 }
+  },
+  deep_focus: {
+    id: 'deep_focus',
+    name: 'Deep Focus',
+    category: 'Creative',
+    cost: 140,
+    minLevel: 4,
+    desc: 'Immersion flow state. Mental activities (study, coding, design, writing) cost 25% less energy.',
+    effect: { mentalEnergySave: 0.25 }
+  },
+  resilient_metabolism: {
+    id: 'resilient_metabolism',
+    name: 'Resilient Metabolism',
+    category: 'Physical',
+    cost: 160,
+    minLevel: 4,
+    desc: 'Robust physical endurance. Satiety depletion rate reduced by 25% during active waking hours.',
+    effect: { satietySave: 0.25 }
+  }
+};
+
+export const EXTENDED_ITEMS = {
+  vintage_camera: {
+    id: 'vintage_camera',
+    name: 'Vintage 35mm Camera',
+    type: 'equipment',
+    slot: 'tool',
+    price: 45,
+    sell: 22,
+    desc: 'Classic mechanical camera with manual focus ring. Grants +25% score and bonus Photography EXP.',
+    effect: { photographyBonus: 0.25 }
+  },
+  linen_trench: {
+    id: 'linen_trench',
+    name: 'Tailored Linen Trenchcoat',
+    type: 'equipment',
+    slot: 'outfit',
+    price: 65,
+    sell: 30,
+    desc: 'Sophisticated lightweight trenchcoat. Boosts Charisma and Civic Debate influence by +10%.',
+    effect: { debateBonus: 0.10, charismaAttr: 1 }
+  },
+  artisan_skillet: {
+    id: 'artisan_skillet',
+    name: 'Cast Iron Chef Skillet',
+    type: 'equipment',
+    slot: 'tool',
+    price: 40,
+    sell: 18,
+    desc: 'Heirloom heavy seasoned pan. Improves dish quality and Cooking session efficiency by +20%.',
+    effect: { cookingBonus: 0.20 }
+  },
+  brass_wristwatch: {
+    id: 'brass_wristwatch',
+    name: 'Minimalist Brass Watch',
+    type: 'equipment',
+    slot: 'accessory',
+    price: 55,
+    sell: 25,
+    desc: 'Precise analog timepiece. Travel time throughout the city reduced by 15%.',
+    effect: { travelSpeed: 0.15 }
+  },
+  leather_satchel: {
+    id: 'leather_satchel',
+    name: 'Leather Messenger Satchel',
+    type: 'equipment',
+    slot: 'accessory',
+    price: 50,
+    sell: 20,
+    desc: 'Handcrafted vegetable-tanned leather bag. Enhances inventory storage and carries books safely.',
+    effect: { carryCapacity: 5 }
+  },
+  running_shoes: {
+    id: 'running_shoes',
+    name: 'Ergonomic Trail Runners',
+    type: 'equipment',
+    slot: 'outfit',
+    price: 48,
+    sell: 22,
+    desc: 'Lightweight cushioned footwear. Jogging and transit energy consumption reduced by 20%.',
+    effect: { fitnessEnergySave: 0.20 }
+  }
+};
+
+Object.assign(ITEMS, EXTENDED_ITEMS);
+MARKET_STOCK.push('vintage_camera', 'linen_trench', 'artisan_skillet', 'brass_wristwatch', 'leather_satchel', 'running_shoes');
+
+// ============================================================================
+// EXPANSION: 14 ADDITIONAL NAMED NPCS (TOTAL 21)
+// ============================================================================
+export const EXPANSION_NPCS = {
+  ren: {
+    id: 'ren', name: 'Ren Takahashi', role: 'Boutique Chef',
+    district: 'lantern_district', loc: 'market',
+    desc: 'Passionate culinary artist experimenting with seasonal coastal flavors.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5], from: 10, to: 16, loc: 'market' },
+      { days: [5, 6], from: 17, to: 22, loc: 'cafe' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Discuss cooking philosophy', once: true,
+        text: ['"Balance in cooking is like harmony in architecture," Ren observes with a smile.'],
+        reward: { rel: 5, skill: 'cooking', skillExp: 8, exp: 6 } }
+    ]
+  },
+  maya: {
+    id: 'maya', name: 'Maya Lin', role: 'Documentary Photographer',
+    district: 'coastal_marina', loc: 'marina',
+    desc: 'Observant street photographer with a vintage rangefinder slung over her shoulder.',
+    schedule: [
+      { days: [2, 3, 4, 6], from: 8, to: 15, loc: 'marina' },
+      { days: [0], from: 14, to: 19, loc: 'cafe' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Talk photography and light', once: true,
+        text: ['"Light tells the story before you even click the shutter," Maya whispers.'],
+        reward: { rel: 5, skill: 'photography', skillExp: 8, exp: 6 } }
+    ]
+  },
+  samir: {
+    id: 'samir', name: 'Samir Patel', role: 'Civic Advocate & Debater',
+    district: 'metro_core', loc: 'downtown',
+    desc: 'Eloquent public speaker focused on sustainable urban policy and open debates.',
+    schedule: [
+      { days: [1, 3, 5], from: 10, to: 17, loc: 'downtown' },
+      { days: [2, 4], from: 14, to: 18, loc: 'library' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Debate civic public transit', once: true,
+        text: ['"Constructive disagreement is the engine of genuine community progress," Samir asserts.'],
+        reward: { rel: 5, skill: 'negotiation', skillExp: 8, exp: 6 } }
+    ]
+  },
+  hannah: {
+    id: 'hannah', name: 'Hannah Vance', role: 'Botanist & Horticulturist',
+    district: 'university_quarter', loc: 'university',
+    desc: 'Gentle researcher with green-stained gardening gloves and deep knowledge of coastal flora.',
+    schedule: [
+      { days: [1, 2, 4, 5], from: 9, to: 15, loc: 'university' },
+      { days: [6], from: 8, to: 13, loc: 'market' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Ask about campus gardens', once: true,
+        text: ['"Even in a bustling concrete city, resilient roots find a way," Hannah smiles.'],
+        reward: { rel: 5, skill: 'research', skillExp: 8, exp: 6 } }
+    ]
+  },
+  kai: {
+    id: 'kai', name: 'Kai Jensen', role: 'Hardware Hacker & Maker',
+    district: 'innovation_corridor', loc: 'tech_park',
+    desc: 'Enthusiastic inventor tinkering with modular microcontrollers and open-source circuits.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5], from: 11, to: 19, loc: 'tech_park' },
+      { days: [6], from: 15, to: 20, loc: 'cafe' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Inspect circuit prototypes', once: true,
+        text: ['"If you cannot open it and understand it, do you truly own it?" Kai grins.'],
+        reward: { rel: 5, skill: 'programming', skillExp: 8, exp: 6 } }
+    ]
+  },
+  zara: {
+    id: 'zara', name: 'Zara Al-Mansoor', role: 'Editorial Art Director',
+    district: 'metro_core', loc: 'downtown',
+    desc: 'Stylish graphic designer curating independent publications and typography exhibitions.',
+    schedule: [
+      { days: [1, 3, 5], from: 9, to: 16, loc: 'downtown' },
+      { days: [0], from: 11, to: 16, loc: 'library' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Discuss editorial layouts', once: true,
+        text: ['"Negative space breathes rhythm into narrative typography," Zara explains.'],
+        reward: { rel: 5, skill: 'design', skillExp: 8, exp: 6 } }
+    ]
+  },
+  lucas: {
+    id: 'lucas', name: 'Lucas Rossi', role: 'Endurance Triathlete & Coach',
+    district: 'coastal_marina', loc: 'marina',
+    desc: 'Upbeat athletic coach who leads waterfront morning runs and rowing sessions.',
+    schedule: [
+      { days: [1, 2, 3, 4, 6], from: 6, to: 12, loc: 'marina' },
+      { days: [2, 4], from: 14, to: 17, loc: 'cafe' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Talk stamina conditioning', once: true,
+        text: ['"Consistency outpaces raw intensity every single week," Lucas encourages.'],
+        reward: { rel: 5, skill: 'fitness', skillExp: 8, exp: 6 } }
+    ]
+  },
+  nadia: {
+    id: 'nadia', name: 'Nadia Sorel', role: 'Artisan Barista & Roaster',
+    district: 'harbor_quarter', loc: 'cafe',
+    desc: 'Attentive coffee craftsman who understands bean origins and sensory flavor notes.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5, 6], from: 7, to: 14, loc: 'cafe' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Taste single-origin pour-over', once: true,
+        text: ['"Notice the subtle jasmine aroma before the citrus acidity hits," Nadia instructs.'],
+        reward: { rel: 5, skill: 'cooking', skillExp: 8, exp: 6 } }
+    ]
+  },
+  arjun: {
+    id: 'arjun', name: 'Arjun Mehta', role: 'Investigative Journalist',
+    district: 'harbor_quarter', loc: 'library',
+    desc: 'Sharp reporter digging into municipal zoning records and harbor logistics contracts.',
+    schedule: [
+      { days: [1, 2, 3, 4], from: 10, to: 18, loc: 'library' },
+      { days: [5], from: 12, to: 16, loc: 'downtown' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Inquire about civic archives', once: true,
+        text: ['"Follow the paperwork and you understand the real pulse of the city," Arjun notes.'],
+        reward: { rel: 5, skill: 'research', skillExp: 8, exp: 6 } }
+    ]
+  },
+  clara: {
+    id: 'clara', name: 'Clara Dubois', role: 'Restoration Bookbinder',
+    district: 'lantern_district', loc: 'market',
+    desc: 'Meticulous craftswoman preserving vintage volumes with linen threads and leather tooling.',
+    schedule: [
+      { days: [2, 3, 4, 5, 6], from: 9, to: 15, loc: 'market' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Admire hand-bound leather journals', once: true,
+        text: ['"A sturdy stitch allows stories to endure across centuries," Clara smiles.'],
+        reward: { rel: 5, skill: 'writing', skillExp: 8, exp: 6 } }
+    ]
+  },
+  devon: {
+    id: 'devon', name: 'Devon Ward', role: 'Sound Engineer & Acoustic Designer',
+    district: 'innovation_corridor', loc: 'tech_park',
+    desc: 'Ambient musician and audio engineer designing spatial soundscapes and studio hardware.',
+    schedule: [
+      { days: [1, 2, 4, 5], from: 12, to: 20, loc: 'tech_park' },
+      { days: [6], from: 16, to: 21, loc: 'marina' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Listen to frequency modulation demos', once: true,
+        text: ['"Sound is physical vibration touching your nervous system directly," Devon says.'],
+        reward: { rel: 5, skill: 'research', skillExp: 8, exp: 6 } }
+    ]
+  },
+  soraya: {
+    id: 'soraya', name: 'Soraya Kassem', role: 'Commercial Arbitrator',
+    district: 'metro_core', loc: 'downtown',
+    desc: 'Fair-minded mediator resolving enterprise disputes and partnership contracts.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5], from: 9, to: 17, loc: 'downtown' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Discuss conflict arbitration', once: true,
+        text: ['"The finest settlement leaves both parties confident in their future," Soraya advises.'],
+        reward: { rel: 5, skill: 'negotiation', skillExp: 8, exp: 6 } }
+    ]
+  },
+  tariq: {
+    id: 'tariq', name: 'Tariq Mansur', role: 'Urban Ecologist',
+    district: 'university_quarter', loc: 'university',
+    desc: 'Field biologist mapping microclimates and bird migrations across harbor wetlands.',
+    schedule: [
+      { days: [1, 3, 5], from: 8, to: 14, loc: 'university' },
+      { days: [2, 4], from: 10, to: 16, loc: 'marina' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Examine wetland water samples', once: true,
+        text: ['"Healthy waterways are the truest indicator of sustainable cities," Tariq explains.'],
+        reward: { rel: 5, skill: 'research', skillExp: 8, exp: 6 } }
+    ]
+  },
+  fiona: {
+    id: 'fiona', name: 'Fiona Gallagher', role: 'Community Arts Organizer',
+    district: 'harbor_quarter', loc: 'cafe',
+    desc: 'Energetic cultural coordinator organizing neighborhood mural projects and open mic nights.',
+    schedule: [
+      { days: [2, 3, 4, 5], from: 11, to: 17, loc: 'cafe' },
+      { days: [6], from: 10, to: 16, loc: 'market' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Plan neighborhood mural wall', once: true,
+        text: ['"Art belongs in public alleys, not behind velvet museum ropes," Fiona beams.'],
+        reward: { rel: 5, skill: 'design', skillExp: 8, exp: 6 } }
+    ]
+  }
+};
+
+Object.assign(NPCS, EXPANSION_NPCS);
+
+export const EXPANSION_NPC_PERSONALITIES = {
+  ren: {
+    id: 'ren', name: 'Ren', traits: ['creative', 'meticulous', 'calm'],
+    openness: 80, conscientiousness: 85, extraversion: 55, agreeableness: 75, emotionalStability: 80,
+    interests: ['culinary science', 'seasonal foraging', 'flavor balance'],
+    conversationalStyle: 'warm, precise, sensory-focused'
+  },
+  maya: {
+    id: 'maya', name: 'Maya', traits: ['observant', 'intuitive', 'spontaneous'],
+    openness: 90, conscientiousness: 70, extraversion: 60, agreeableness: 80, emotionalStability: 75,
+    interests: ['street photography', 'natural lighting', 'human stories'],
+    conversationalStyle: 'poetic, observant, perceptive'
+  },
+  samir: {
+    id: 'samir', name: 'Samir', traits: ['analytical', 'articulate', 'principled'],
+    openness: 75, conscientiousness: 90, extraversion: 75, agreeableness: 70, emotionalStability: 85,
+    interests: ['civic policy', 'debate logic', 'public transit'],
+    conversationalStyle: 'structured, engaging, rational'
+  },
+  hannah: {
+    id: 'hannah', name: 'Hannah', traits: ['patient', 'nurturing', 'studious'],
+    openness: 80, conscientiousness: 85, extraversion: 45, agreeableness: 90, emotionalStability: 85,
+    interests: ['botany', 'soil ecology', 'medicinal herbs'],
+    conversationalStyle: 'gentle, encouraging, grounded'
+  },
+  kai: {
+    id: 'kai', name: 'Kai', traits: ['inventive', 'curious', 'energetic'],
+    openness: 92, conscientiousness: 75, extraversion: 70, agreeableness: 80, emotionalStability: 75,
+    interests: ['embedded electronics', 'open hardware', 'robotics'],
+    conversationalStyle: 'rapid, eager, hands-on'
+  },
+  zara: {
+    id: 'zara', name: 'Zara', traits: ['aesthetic', 'discerning', 'confident'],
+    openness: 88, conscientiousness: 85, extraversion: 65, agreeableness: 70, emotionalStability: 80,
+    interests: ['typography', 'print culture', 'visual identity'],
+    conversationalStyle: 'stylish, insightful, refined'
+  },
+  lucas: {
+    id: 'lucas', name: 'Lucas', traits: ['disciplined', 'upbeat', 'resilient'],
+    openness: 65, conscientiousness: 90, extraversion: 80, agreeableness: 85, emotionalStability: 90,
+    interests: ['triathlon', 'cardio conditioning', 'sports nutrition'],
+    conversationalStyle: 'motivating, direct, cheerful'
+  },
+  nadia: {
+    id: 'nadia', name: 'Nadia', traits: ['focused', 'welcoming', 'sensory'],
+    openness: 78, conscientiousness: 88, extraversion: 70, agreeableness: 85, emotionalStability: 82,
+    interests: ['coffee roasting', 'latte art', 'flavor extraction'],
+    conversationalStyle: 'friendly, sensory, hospitable'
+  },
+  arjun: {
+    id: 'arjun', name: 'Arjun', traits: ['tenacious', 'skeptical', 'inquisitive'],
+    openness: 85, conscientiousness: 85, extraversion: 60, agreeableness: 65, emotionalStability: 80,
+    interests: ['investigative journalism', 'public records', 'municipal zoning'],
+    conversationalStyle: 'probing, sharp, candid'
+  },
+  clara: {
+    id: 'clara', name: 'Clara', traits: ['methodical', 'quiet', 'artistic'],
+    openness: 82, conscientiousness: 92, extraversion: 35, agreeableness: 85, emotionalStability: 85,
+    interests: ['bookbinding', 'paper conservation', 'archival stitching'],
+    conversationalStyle: 'soft-spoken, patient, reverent'
+  },
+  devon: {
+    id: 'devon', name: 'Devon', traits: ['perceptive', 'unconventional', 'focused'],
+    openness: 90, conscientiousness: 75, extraversion: 50, agreeableness: 75, emotionalStability: 78,
+    interests: ['analog synths', 'sound design', 'acoustics'],
+    conversationalStyle: 'ambient, technical, curious'
+  },
+  soraya: {
+    id: 'soraya', name: 'Soraya', traits: ['diplomatic', 'composed', 'judicious'],
+    openness: 75, conscientiousness: 90, extraversion: 70, agreeableness: 80, emotionalStability: 90,
+    interests: ['commercial mediation', 'contract law', 'equity'],
+    conversationalStyle: 'balanced, measured, empathetic'
+  },
+  tariq: {
+    id: 'tariq', name: 'Tariq', traits: ['systemic', 'observant', 'patient'],
+    openness: 85, conscientiousness: 85, extraversion: 45, agreeableness: 80, emotionalStability: 82,
+    interests: ['urban ecology', 'wetland restoration', 'ornithology'],
+    conversationalStyle: 'scientific, steady, thoughtful'
+  },
+  fiona: {
+    id: 'fiona', name: 'Fiona', traits: ['passionate', 'vibrant', 'inclusive'],
+    openness: 88, conscientiousness: 70, extraversion: 88, agreeableness: 85, emotionalStability: 75,
+    interests: ['public art', 'neighborhood murals', 'community gathering'],
+    conversationalStyle: 'spirited, inviting, charismatic'
+  }
+};
+
+Object.assign(NPC_PERSONALITIES, EXPANSION_NPC_PERSONALITIES);

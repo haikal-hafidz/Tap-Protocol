@@ -29,12 +29,18 @@ function playChime(freq = 440, duration = 0.12, settings = null) {
 // Every control carries data-action (clicks) or data-form (submits). No emojis anywhere in this project.
 import * as D from './data.js';
 import * as R from './rules.js';
+import { AVATAR_OPTIONS, DEFAULT_AVATAR, sanitizeAvatar, getRandomAvatar, renderAvatarSvg } from './avatar.js';
+import { MINIGAMES, createMinigameSession, stepMinigame, finishMinigame } from './minigames.js';
+import { renderCityMapSvg } from './map.js';
+import { renderLocationSceneSvg } from './scenes.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // Primary navigation: exactly these five, in this order, as a bottom bar at every width. Tracker, Quests, Inventory and
 // Settings (with save management) are pages reached through More. Progress is character progression only.
 const NAV = [['dashboard', 'Home'], ['world', 'World'], ['journal', 'Journal'], ['character', 'Progress'], ['more', 'More']];
 const MORE_PAGES = [
+  ['minigames', 'Activity Arcade', '14 playable interactive mini-games across life, arts, and intellect.'],
+  ['perks', 'Perk Shop', 'Purchasable permanent talents and lifestyle efficiencies.'],
   ['career', 'Career & Jobs', 'Employment, job listings, and career development.'],
   ['education', 'Education & Courses', 'University degrees and vocational certificates.'],
   ['finances', 'Finances & Banking', 'Personal ledger, bank accounts, and savings.'],
@@ -43,12 +49,13 @@ const MORE_PAGES = [
   ['organizations', 'Guilds & Organizations', 'Professional guilds, arts collectives, and civic associations.'],
   ['tracker', 'Tracker', 'Real-life habits and goals.'],
   ['quests', 'Quests', 'Jobs and their deadlines.'],
-  ['inventory', 'Inventory', 'What you carry, and the market stall.'],
+  ['inventory', 'Inventory', 'What you carry, wearable equipment, and the market stall.'],
   ['settings', 'Settings and save data', 'Rewards, export, import, cloud sync and reset.']
 ];
 const HOME_TABS = [['people', 'People', 'Your connections', 'people'], ['family', 'Family', 'Your inner circle', 'family'], ['personal', 'Personal', 'Your real life', 'personal']];
 const TITLES = {
   dashboard: 'Home', world: 'World', journal: 'Journal', character: 'Progress', more: 'More',
+  minigames: 'Activity Arcade', perks: 'Perks',
   career: 'Career', education: 'Education', finances: 'Finances', properties: 'Properties & Business', competitions: 'Competitions', organizations: 'Organizations',
   tracker: 'Tracker', quests: 'Quests', inventory: 'Inventory', settings: 'Settings'
 };
@@ -58,6 +65,8 @@ const HEADINGS = {
   world: ['Discover', 'Explore your modern world and its connections.'],
   journal: ['Records', 'Your entries, activity history, and life chronicle.'],
   character: ['Development', 'Review your character and progression.'],
+  minigames: ['Interactive Arcade', 'Master craft, intellect, and physical timing through mini-games.'],
+  perks: ['Talents & Lifestyle', 'Invest your earnings into permanent character advantages.'],
   more: ['Toolkit', 'Your systems, records, and settings.'],
   career: ['Employment', 'Corporate careers, professional opportunities, and work performance.'],
   education: ['Academics & Skills', 'University programs, vocational credentials, and study.'],
@@ -109,7 +118,8 @@ export function createApp(root, deps) {
   const app = {
     state: null, view: 'dashboard', report: null, pending: null, talkNpc: null, journalTab: 'entries',
     saveStatus: '', homeTab: 'personal', panel: null, confirmDlg: null, formDrafts: {}, saveError: '', reveal: null, focusNext: null, draft: {}, errors: [], journalError: '', trackerMsg: '', trackerError: '', importError: '', resetError: '', exportMsg: '',
-    chain: Promise.resolve(), recovered: false
+    chain: Promise.resolve(), recovered: false,
+    mainMenuOpen: false, activeMinigame: null, activeMinigameSession: null, minigameResult: null
   };
 
   const settle = () => app.chain;
@@ -160,8 +170,13 @@ export function createApp(root, deps) {
   function heroStatus(s) {
     const c = s.character, n = s.needs, tags = needTags(s), need = R.expNeed(c.level);
     const tile = (label, v, cls) => `<div class="stat"><span>${label}</span><b>${v}</b>${bar(v, 100, cls, label)}</div>`;
+    const av = c.avatar ? renderAvatarSvg(c.avatar, 72) : '';
     return `<section class="hero statusbar" aria-label="Status summary">
-      <div class="hero-top"><div><div class="eyebrow">Player status</div><h2><button class="who" data-action="nav" data-view="character" aria-label="${esc(c.name)}, level ${c.level}. Open Progress">${esc(c.name)}</button></h2><p>${esc(D.LOCATIONS[s.location].name)}</p></div><span class="level">Level ${c.level}</span></div>
+      <div class="hero-top" style="display:flex;align-items:center;gap:1rem;">
+        ${av ? `<div class="avatar-hero-wrap" style="flex:none;width:72px;height:72px;border-radius:12px;overflow:hidden;background:#fff;">${av}</div>` : ''}
+        <div style="flex:1;min-width:0;"><div class="eyebrow">Player status</div><h2><button class="who" data-action="nav" data-view="character" aria-label="${esc(c.name)}, level ${c.level}. Open Progress">${esc(c.name)}</button></h2><p>${esc(D.LOCATIONS[s.location].name)}</p></div>
+        <span class="level">Level ${c.level}</span>
+      </div>
       ${s.emotions ? `<div class="chips" aria-label="Emotional & psychological state"><span class="chip">Mood: ${s.emotions.mood}/100</span><span class="chip">Stress: ${s.emotions.stress}/100</span><span class="chip">Motivation: ${s.emotions.motivation}/100</span><span class="chip">Atmosphere: ${esc(s.atmosphere?.currentPeriod || 'Day')} (${esc((s.atmosphere?.currentWeather || '').replace(/_/g, ' '))})</span></div>` : ''}
       <div class="meter">${bar(c.exp, need, 'exp', 'EXP')}</div><div class="small">${c.exp} / ${need} EXP</div>
       <div class="stats">${tile('Health', n.health, 'health')}${tile('Energy', n.energy, 'energy')}${tile('Satiety', n.satiety, 'satiety')}<div class="stat"><span>Money</span><b>${s.money}</b></div></div>
@@ -186,8 +201,32 @@ export function createApp(root, deps) {
   }
 
   // ------------------------------------------------------------ setup
+  function mainMenuHtml() {
+    return `<div class="main-menu-overlay">
+      <div class="main-menu-card">
+        <svg viewBox="0 0 512 512" width="64" height="64" style="margin: 0 auto; display: block;" role="img" aria-label="Brand Mark">
+          <circle cx="256" cy="256" r="230" fill="#354B3B"/>
+          <circle cx="256" cy="256" r="160" fill="#FFFEFC"/>
+          <path d="M 160 200 L 352 200 L 352 240 L 280 240 L 280 340 L 232 340 L 232 240 L 160 240 Z" fill="#354B3B"/>
+          <polygon points="320,165 340,185 320,205 300,185" fill="#BA6956"/>
+        </svg>
+        <h1 class="main-menu-title">TAP PROTOCOL</h1>
+        <p class="main-menu-tagline">Contemporary Editorial RPG & Life Simulation</p>
+        <div class="main-menu-nav">
+          ${app.state ? `<button class="btn primary" data-action="continue-game">Continue Story</button>` : ''}
+          <button class="btn ${app.state ? '' : 'primary'}" data-action="new-game-menu">New Game</button>
+          <button class="btn" data-action="open-more-page" data-page="settings">Load / Cloud Sync</button>
+          <button class="btn" data-action="open-credits">Credits & Vision</button>
+        </div>
+      </div>
+    </div>`;
+  }
+
   function setupHtml() {
+    if (app.mainMenuOpen) return mainMenuHtml();
     const d = app.draft;
+    d.avatar = d.avatar || { ...DEFAULT_AVATAR };
+    const curAvatar = sanitizeAvatar(d.avatar);
     const bgs = D.BACKGROUNDS.map((b, i) => {
       const bonus = Object.entries(b.attrs).map(([k, v]) => `${D.ATTRIBUTES.find((a) => a.id === k).name} +${v}`).join(', ');
       const sk = Object.entries(b.skills).map(([k, v]) => `${D.SKILLS.find((a) => a.id === k).name} ${v}`).join(', ');
@@ -199,24 +238,54 @@ export function createApp(root, deps) {
       const checked = (d.trait || 'curious') === t.id ? 'checked' : '';
       return `<label class="choice slim"><input type="radio" name="trait" value="${t.id}" ${checked}><span><strong>${esc(t.name)}</strong><em>${esc(t.desc)}</em></span></label>`;
     }).join('');
+
+    const skinToneBtns = AVATAR_OPTIONS.skinTone.map((st) => `<button type="button" class="option-card ${curAvatar.skinTone === st.id ? 'selected' : ''}" data-action="set-avatar-option" data-key="skinTone" data-val="${st.id}"><span class="color-swatch" style="background:${st.hex};"></span>${esc(st.label)}</button>`).join('');
+    const hairStyleBtns = AVATAR_OPTIONS.hairstyle.map((hs) => `<button type="button" class="option-card ${curAvatar.hairstyle === hs.id ? 'selected' : ''}" data-action="set-avatar-option" data-key="hairstyle" data-val="${hs.id}">${esc(hs.label)}</button>`).join('');
+    const hairColorBtns = AVATAR_OPTIONS.hairColor.map((hc) => `<button type="button" class="option-card ${curAvatar.hairColor === hc.id ? 'selected' : ''}" data-action="set-avatar-option" data-key="hairColor" data-val="${hc.id}"><span class="color-swatch" style="background:${hc.hex};"></span>${esc(hc.label)}</button>`).join('');
+    const clothingBtns = AVATAR_OPTIONS.clothing.map((cl) => `<button type="button" class="option-card ${curAvatar.clothing === cl.id ? 'selected' : ''}" data-action="set-avatar-option" data-key="clothing" data-val="${cl.id}"><span class="color-swatch" style="background:${cl.color};"></span>${esc(cl.label)}</button>`).join('');
+    const accBtns = AVATAR_OPTIONS.accessories.map((ac) => `<button type="button" class="option-card ${curAvatar.accessories === ac.id ? 'selected' : ''}" data-action="set-avatar-option" data-key="accessories" data-val="${ac.id}">${esc(ac.label)}</button>`).join('');
+
     return `<main class="setup">
       <header class="setup-head"><h1>TAP Protocol</h1><p>A life journal inside an open-ended text RPG. Create Pithe, your fictional counterpart, and step into the Harbor Quarter. Everything is stored in this browser. Nothing is sent anywhere.</p></header>
       ${app.recovered ? '<p class="notice">Your main save was damaged and the previous backup was restored.</p>' : ''}
       ${app.errors.length ? `<ul class="errors" role="alert">${app.errors.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
       ${deps.cloudPanel ? deps.cloudPanel() : ''}
       <form data-form="create" class="stack" novalidate>
-        <fieldset class="window"><legend>Identity</legend>
-          <label>Character name<input name="name" maxlength="30" value="${esc(d.name ?? 'Pithe')}"></label>
-          <label>Fictional age<input name="age" type="number" min="16" max="99" value="${esc(d.age ?? 24)}"></label>
-          <label>Appearance (text description)<textarea name="appearance" rows="3" maxlength="400" placeholder="Height, build, clothing, anything you want to picture.">${esc(d.appearance ?? '')}</textarea></label>
-        </fieldset>
-        <fieldset class="window"><legend>Background</legend><p class="hint">Sets your starting attributes, beginner skill and circumstances. It never limits your future.</p>${bgs}</fieldset>
-        <fieldset class="window"><legend>Personality trait</legend><p class="hint">Shapes suggestions and narration. It never forces your choices.</p><div class="choices">${traits}</div></fieldset>
-        <fieldset class="window"><legend>Rules</legend>
-          <p><strong>Difficulty: Hardcore.</strong> Hunger, energy and health matter. You get a warning before any action that costs you something real. Failure never deletes your save.</p>
-          <label class="check"><input type="checkbox" name="integration" ${d.integration === false ? '' : 'checked'}> Let real-life Tracker completions reward Pithe (on by default, changeable later)</label>
-        </fieldset>
-        <button class="btn primary big" type="submit">Create Pithe and begin</button>
+        <div class="creator-container">
+          <div class="creator-preview-panel">
+            <div class="avatar-preview-wrap">
+              ${renderAvatarSvg(curAvatar, 180)}
+            </div>
+            <div class="creator-preview-controls">
+              <button type="button" class="btn" data-action="randomize-avatar">Randomize</button>
+              <button type="button" class="btn" data-action="reset-avatar">Reset</button>
+            </div>
+          </div>
+          <div>
+            <fieldset class="window"><legend>Visual Identity & Appearance</legend>
+              <p class="hint">Customize your character's facial features, hairstyle, clothing, and accessories.</p>
+              <div class="stack">
+                <label>Skin Tone</label><div class="options-grid">${skinToneBtns}</div>
+                <label>Hairstyle</label><div class="options-grid">${hairStyleBtns}</div>
+                <label>Hair Color</label><div class="options-grid">${hairColorBtns}</div>
+                <label>Clothing & Attire</label><div class="options-grid">${clothingBtns}</div>
+                <label>Accessories</label><div class="options-grid">${accBtns}</div>
+              </div>
+            </fieldset>
+            <fieldset class="window"><legend>Identity</legend>
+              <label>Character name<input name="name" maxlength="30" value="${esc(d.name ?? 'Pithe')}"></label>
+              <label>Fictional age<input name="age" type="number" min="16" max="99" value="${esc(d.age ?? 24)}"></label>
+              <label>Appearance (text description)<textarea name="appearance" rows="3" maxlength="400" placeholder="Height, build, clothing, anything you want to picture.">${esc(d.appearance ?? '')}</textarea></label>
+            </fieldset>
+            <fieldset class="window"><legend>Background</legend><p class="hint">Sets your starting attributes, beginner skill and circumstances. It never limits your future.</p>${bgs}</fieldset>
+            <fieldset class="window"><legend>Personality trait</legend><p class="hint">Shapes suggestions and narration. It never forces your choices.</p><div class="choices">${traits}</div></fieldset>
+            <fieldset class="window"><legend>Rules</legend>
+              <p><strong>Difficulty: Hardcore.</strong> Hunger, energy and health matter. You get a warning before any action that costs you something real. Failure never deletes your save.</p>
+              <label class="check"><input type="checkbox" name="integration" ${d.integration === false ? '' : 'checked'}> Let real-life Tracker completions reward Pithe (on by default, changeable later)</label>
+            </fieldset>
+            <button class="btn primary big" type="submit">Create Pithe and begin</button>
+          </div>
+        </div>
       </form></main>`;
   }
 
@@ -545,6 +614,8 @@ export function createApp(root, deps) {
   function worldView(s) {
     const loc = D.LOCATIONS[s.location];
     const locEnv = (s.worldLocations && s.worldLocations[s.location]) || { activityLevel: 50, reputation: 50, popularity: 50, history: [] };
+    const sceneHtml = `<div class="scene-frame">${renderLocationSceneSvg(s.location)}<div class="scene-caption"><h2 class="scene-title">${esc(loc.name)}</h2><span class="scene-meta">${esc(loc.district.replace(/_/g, ' '))} &bull; ${esc(loc.desc)}</span></div></div>`;
+    const mapHtml = `<section class="panel"><h2>Harbor Province Map</h2><p class="hint">Select a connected destination to travel.</p><div class="map-viewport">${renderCityMapSvg(s.location)}</div></section>`;
     const go = Object.keys(D.LOCATIONS).filter((id) => id !== s.location).map((id) => {
       const p = R.preview(s, { kind: 'travel', to: id });
       return actionCard(D.LOCATIONS[id].name, `${D.LOCATIONS[id].desc} Hours: ${D.LOCATIONS[id].open ? D.LOCATIONS[id].open.label : 'always'}.`, { kind: 'travel', to: id }, p, 'Go');
@@ -702,13 +773,15 @@ export function createApp(root, deps) {
     }).join('');
 
     const ev = R.worldEvents(s);
-    return `<section class="window"><header><h2>${esc(loc.name)}</h2><p class="sub">${esc(R.formatClock(s.clock))}. ${esc(R.periodOf(s.clock))}.</p></header><p>${esc(loc.desc)}</p>
+    return `${sceneHtml}
+      <section class="window"><header><h2>${esc(loc.name)}</h2><p class="sub">${esc(R.formatClock(s.clock))}. ${esc(R.periodOf(s.clock))}.</p></header><p>${esc(loc.desc)}</p>
       <div class="stats"><div class="stat"><span>Activity</span><b>${locEnv.activityLevel}/100</b></div><div class="stat"><span>Reputation</span><b>${locEnv.reputation}/100</b></div><div class="stat"><span>Popularity</span><b>${locEnv.popularity}/100</b></div></div>
       ${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</section>
       ${talk}
       ${storiesHtml ? `<section class="panel"><h2>Local Developments & Storylines</h2><ul class="actions">${storiesHtml}</ul></section>` : ''}
       ${eventsHtml ? `<section class="panel"><h2>Happening Now at ${esc(loc.name)}</h2><ul class="actions">${eventsHtml}</ul></section>` : ''}
       ${districtHtml}
+      ${mapHtml}
       <section class="panel"><h2>People here</h2>${npcs ? `<ul class="actions">${npcs}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
       <section class="panel"><h2>Travel</h2><ul class="actions">${go}</ul></section>
       <section class="panel"><h2>Who is where</h2><ul class="plain">${where}</ul><p class="hint">The world only moves when you act. Time stops when you close the game.</p></section>`;
@@ -728,20 +801,179 @@ export function createApp(root, deps) {
       <p><strong>Reward:</strong> ${esc(D.QUEST.reward)}</p>${outcome}</section>`;
   }
 
+  function minigamesView(s) {
+    if (app.activeMinigame && app.activeMinigameSession) {
+      const mg = MINIGAMES[app.activeMinigame];
+      const session = app.activeMinigameSession;
+      return `<section class="minigame-container">
+        <div class="minigame-header">
+          <h2 class="minigame-title">${esc(mg.title)}</h2>
+          <p class="minigame-instructions">${esc(mg.instructions)}</p>
+          <small>Energy Cost: ${mg.energyCost} | Duration: ${mg.durationMinutes}m | Related Skill: ${mg.skill}</small>
+        </div>
+        <div class="minigame-stage">
+          ${renderMinigameStage(session)}
+        </div>
+        <div class="row">
+          <button class="btn danger" data-action="exit-minigame">Abandon Game</button>
+        </div>
+      </section>`;
+    }
+
+    const cards = Object.values(MINIGAMES).map((mg) => {
+      const record = s.minigames?.records?.[mg.id] || 0;
+      const today = R.localDateStr(new Date());
+      const played = s.minigames?.dailyPlays?.[today]?.[mg.id] || 0;
+      return `<li class="action">
+        <div class="action-main">
+          <strong>${esc(mg.title)}</strong> <span class="tag">${esc(mg.category)}</span>
+          <p>${esc(mg.desc)}</p>
+          <small>Skill: ${esc(mg.skill)} &bull; Cost: ${mg.energyCost} Energy (${mg.durationMinutes}m) &bull; High Score: ${record} &bull; Daily: ${played}/${mg.dailyCap}</small>
+        </div>
+        <button class="btn primary" data-action="start-minigame" data-game="${mg.id}">Play</button>
+      </li>`;
+    }).join('');
+
+    return `<section class="window">
+      <header><h2>Activity Arcade & Mini-Games</h2><p class="sub">14 interactive challenges across life routines, craft, debate, and physical timing.</p></header>
+      ${app.minigameResult ? `<div class="report ok" role="status"><p><strong>${esc(app.minigameResult.title)}</strong>: ${esc(app.minigameResult.message)}</p></div>` : ''}
+      <ul class="actions">${cards}</ul>
+    </section>`;
+  }
+
+  function renderMinigameStage(session) {
+    switch (session.gameId) {
+      case 'culinary_prep': {
+        const choices = session.choices[session.step];
+        const btns = choices.map((c, i) => `<button class="minigame-btn" data-action="step-minigame" data-choice="${i}">${esc(c.name)}</button>`).join('');
+        return `<p><strong>Step ${session.step + 1} of ${session.choices.length}:</strong> Select the recipe ingredient:</p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'home_org': {
+        const item = session.items[session.round];
+        return `<p>Organize: <strong>${esc(item.name)}</strong></p>
+          <div class="minigame-grid">
+            <button class="minigame-btn" data-action="step-minigame" data-bin="books">Archive Bookshelf</button>
+            <button class="minigame-btn" data-action="step-minigame" data-bin="tools">Workbench Toolbox</button>
+            <button class="minigame-btn" data-action="step-minigame" data-bin="apparel">Linen Wardrobe</button>
+          </div>`;
+      }
+      case 'grocery_shopping': {
+        const items = session.available.map((it, i) => `<button class="minigame-btn" data-action="step-minigame" data-item="${i}">${esc(it.name)} ($${it.cost})</button>`).join('');
+        const chosen = session.selected.map((s) => s.name).join(', ') || 'None';
+        return `<p>Budget Allowance: $${session.budget} | In Cart (${session.selected.length}/3): ${esc(chosen)}</p><div class="minigame-grid">${items}</div>`;
+      }
+      case 'coffee_crafting': {
+        const p = session.parameters[session.step];
+        const btns = p.options.map((opt, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(opt)}</button>`).join('');
+        return `<p>Calibrate: <strong>${esc(p.name)}</strong></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'urban_photo': {
+        const scn = session.scenes[session.round];
+        const btns = scn.options.map((opt, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(opt)}</button>`).join('');
+        return `<p>Compose Subject: <strong>${esc(scn.subject)}</strong></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'graphic_design': {
+        const p = session.prompts[session.step];
+        const btns = p.choices.map((c, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(c)}</button>`).join('');
+        return `<p>${esc(p.question)}</p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'creative_writing': {
+        const p = session.story[session.step];
+        const btns = p.choices.map((c, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(c)}</button>`).join('');
+        return `<p><em>"${esc(p.prompt)}"</em></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'music_rhythm': {
+        const b = session.beats[session.step];
+        const btns = b.rhythmChoices.map((c, i) => `<button class="minigame-btn" data-action="step-minigame" data-rhythm="${i}">${esc(c)}</button>`).join('');
+        return `<p>Timing: <strong>${esc(b.pattern)}</strong></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'civic_debate': {
+        const a = session.arguments[session.round];
+        const btns = a.counterOptions.map((c, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(c)}</button>`).join('');
+        return `<p>Opposing Claim: <em>"${esc(a.opponent)}"</em></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'trivia_challenge': {
+        const q = session.questions[session.round];
+        const btns = q.options.map((opt, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(opt)}</button>`).join('');
+        return `<p>Question: <strong>${esc(q.q)}</strong></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'social_deduction': {
+        const scn = session.scenarios[session.round];
+        const btns = scn.statements.map((st, i) => `<button class="minigame-btn" data-action="step-minigame" data-contradict="${i}">${esc(st)}</button>`).join('');
+        return `<p>${esc(scn.prompt)}</p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'memory_challenge': {
+        const btns = [1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button class="minigame-btn" data-action="step-minigame" data-num="${n}">${n}</button>`).join('');
+        return `<p>Remember Sequence: <strong>4 - 7 - 2 - 9 - 1</strong> | Entered: ${session.input.join(', ') || 'none'}</p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'fitness_timing': {
+        const l = session.laps[session.lap];
+        const btns = l.choices.map((c, i) => `<button class="minigame-btn" data-action="step-minigame" data-choice="${i}">${esc(c)}</button>`).join('');
+        return `<p>Condition: <strong>${esc(l.windSpeed)}</strong></p><div class="minigame-grid">${btns}</div>`;
+      }
+      case 'business_negotiation': {
+        const o = session.offers[session.round];
+        const btns = o.options.map((opt, i) => `<button class="minigame-btn" data-action="step-minigame" data-opt="${i}">${esc(opt)}</button>`).join('');
+        return `<p>Clause: <strong>${esc(o.clause)}</strong></p><div class="minigame-grid">${btns}</div>`;
+      }
+      default:
+        return '<p>Mini-game in progress...</p>';
+    }
+  }
+
+  function perksView(s) {
+    R.ensureExpansionState(s);
+    const perkCards = Object.values(D.PURCHASABLE_PERKS).map((p) => {
+      const owned = s.character.perks.includes(p.id);
+      return `<div class="perk-card ${owned ? 'owned' : ''}">
+        <div class="attr-top"><h3>${esc(p.name)}</h3><span class="tag">${esc(p.category)}</span></div>
+        <p class="perk-desc">${esc(p.desc)}</p>
+        <div class="row" style="justify-content:space-between;align-items:center;">
+          <span class="perk-cost">${owned ? 'Unlocked' : p.cost + ' Money (Req Lvl ' + p.minLevel + ')'}</span>
+          ${owned ? '<span class="chip">Active</span>' : `<button class="btn primary small" data-action="buy-perk" data-perk="${p.id}" ${s.money < p.cost || s.character.level < p.minLevel ? 'disabled' : ''}>Unlock</button>`}
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<section class="window">
+      <header><h2>Perk Shop & Character Talents</h2><p class="sub">Money: <span class="money">${s.money}</span> | Level: ${s.character.level}</p></header>
+      <div class="shop-grid">${perkCards}</div>
+    </section>`;
+  }
+
   function inventoryView(s) {
+    R.ensureExpansionState(s);
+    const eq = s.character.equipment || {};
+    const eqHtml = `<section class="panel">
+      <h2>Equipped Gear</h2>
+      <div class="stats">
+        <div class="stat"><span>Outfit</span><b>${eq.outfit ? esc(D.ITEMS[eq.outfit]?.name || eq.outfit) : 'None'}</b>${eq.outfit ? `<button class="btn small" data-action="unequip-slot" data-slot="outfit">Unequip</button>` : ''}</div>
+        <div class="stat"><span>Accessory</span><b>${eq.accessory ? esc(D.ITEMS[eq.accessory]?.name || eq.accessory) : 'None'}</b>${eq.accessory ? `<button class="btn small" data-action="unequip-slot" data-slot="accessory">Unequip</button>` : ''}</div>
+        <div class="stat"><span>Tool</span><b>${eq.tool ? esc(D.ITEMS[eq.tool]?.name || eq.tool) : 'None'}</b>${eq.tool ? `<button class="btn small" data-action="unequip-slot" data-slot="tool">Unequip</button>` : ''}</div>
+      </div>
+    </section>`;
+
     const owned = Object.entries(s.inventory).map(([id, qty]) => {
       const it = D.ITEMS[id];
+      if (!it) return '';
       const canUse = it.type === 'food' || it.type === 'consumable';
-      const use = canUse ? actionCard(`${it.name} x${qty}`, it.desc, { kind: 'use', item: id }, R.preview(s, { kind: 'use', item: id }), it.type === 'food' ? 'Eat' : 'Use') : `<li class="action"><div class="action-main"><strong>${esc(it.name)} x${qty}</strong><p>${esc(it.desc)}</p><p class="meta"><span class="chip">${it.type === 'tool' ? 'Passive. Works while carried' : 'Ingredient. Use the Cook action at home'}</span></p></div></li>`;
+      const isEquip = it.type === 'equipment';
+      const useBtn = canUse
+        ? actionCard(`${it.name} x${qty}`, it.desc, { kind: 'use', item: id }, R.preview(s, { kind: 'use', item: id }), it.type === 'food' ? 'Eat' : 'Use')
+        : isEquip
+        ? `<li class="action"><div class="action-main"><strong>${esc(it.name)} x${qty}</strong><p>${esc(it.desc)}</p><p class="meta"><span class="chip">Wearable: ${it.slot}</span></p></div><button class="btn primary" data-action="equip-item" data-item="${id}">Equip</button></li>`
+        : `<li class="action"><div class="action-main"><strong>${esc(it.name)} x${qty}</strong><p>${esc(it.desc)}</p><p class="meta"><span class="chip">${it.type === 'tool' ? 'Passive. Works while carried' : 'Ingredient. Use the Cook action at home'}</span></p></div></li>`;
       const sell = it.sell && s.location === 'market' ? actionCard(`Sell ${it.name}`, '', { kind: 'sell', item: id }, R.preview(s, { kind: 'sell', item: id }), `Sell for ${it.sell}`) : '';
-      return use + sell;
+      return useBtn + sell;
     }).join('');
+
     const shop = D.MARKET_STOCK.map((id) => {
       const it = D.ITEMS[id], price = R.priceOf(s, id);
       return actionCard(`${it.name} (${price} money)`, it.desc, { kind: 'buy', item: id }, R.preview(s, { kind: 'buy', item: id }), `Buy for ${price}`);
     }).join('');
     const ev = R.worldEvents(s);
-    return `<section class="window"><header><h2>Inventory</h2><p class="sub">Money: <span class="money">${s.money}</span></p></header>${owned ? `<ul class="actions">${owned}</ul>` : '<p>You carry nothing yet.</p>'}</section>
+    return `${eqHtml}
+      <section class="window"><header><h2>Inventory</h2><p class="sub">Money: <span class="money">${s.money}</span></p></header>${owned ? `<ul class="actions">${owned}</ul>` : '<p>You carry nothing yet.</p>'}</section>
       <section class="panel"><h2>Lantern Market stall</h2>${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}<p class="hint">Teo trades here 07:00-15:00 (Mon-Sat) and on Saturday 17:00-22:00. You must be at the market. Selling pays about half the price.</p><ul class="actions">${shop}</ul></section>`;
   }
 
@@ -992,8 +1224,8 @@ export function createApp(root, deps) {
   function moreView() {
     const row = (id) => { const m = MORE_PAGES.find((x) => x[0] === id); return listCard(m[0], m[1], m[2]); };
     return `<div class="cols">
-      <section class="panel"><h2>Life & Enterprise</h2>${['career', 'education', 'finances', 'properties', 'competitions', 'organizations'].map(row).join('')}</section>
-      <section class="panel"><h2>Daily Life & System</h2>${['tracker', 'quests', 'inventory', 'settings'].map(row).join('')}</section>
+      <section class="panel"><h2>Activities & Growth</h2>${['minigames', 'perks', 'career', 'education', 'finances', 'properties'].map(row).join('')}</section>
+      <section class="panel"><h2>Civic, Daily & System</h2>${['competitions', 'organizations', 'tracker', 'quests', 'inventory', 'settings'].map(row).join('')}</section>
     </div>`;
   }
 
@@ -1042,6 +1274,7 @@ export function createApp(root, deps) {
     const viewFns = {
       dashboard: dashboardView, character: characterView, journal: journalView,
       tracker: trackerView, world: worldView, quests: questsView, inventory: inventoryView,
+      minigames: minigamesView, perks: perksView,
       settings: settingsView, more: moreView, career: careerView, education: educationView,
       finances: financesView, properties: propertiesView, competitions: competitionsView, organizations: organizationsView
     };
@@ -1162,11 +1395,42 @@ export function createApp(root, deps) {
 
   function onClick(e) {
     const el = e.target.closest('[data-action]');
+    const a = el?.dataset.action;
+
+    if (a === 'continue-game') { app.mainMenuOpen = false; render(); return; }
+    if (a === 'new-game-menu') { app.mainMenuOpen = false; render(); return; }
+    if (a === 'open-credits') {
+      alert('TAP PROTOCOL - Contemporary Editorial RPG & Life Simulation.\nA life journal inside an open-ended narrative world.');
+      return;
+    }
+    if (a === 'open-more-page') {
+      const page = el.dataset.page;
+      if (app.state) { app.mainMenuOpen = false; app.view = page; render(); }
+      return;
+    }
+    if (a === 'set-avatar-option') {
+      const key = el.dataset.key;
+      const val = el.dataset.val;
+      app.draft.avatar = app.draft.avatar || { ...DEFAULT_AVATAR };
+      app.draft.avatar[key] = val;
+      render();
+      return;
+    }
+    if (a === 'randomize-avatar') {
+      app.draft.avatar = getRandomAvatar();
+      render();
+      return;
+    }
+    if (a === 'reset-avatar') {
+      app.draft.avatar = { ...DEFAULT_AVATAR };
+      render();
+      return;
+    }
+
     if (!app.state) return;
     // A click outside an open Messages/Notifications panel (and not on its own buttons) closes it.
     if (app.panel && !e.target.closest('#header-panel') && !(el && el.dataset.action === 'panel')) { app.panel = null; if (!el || el.disabled) render(); }
     if (!el || el.disabled) return;
-    const a = el.dataset.action;
     if (a === 'panel') { const id = el.dataset.panel; if (app.panel === id) closePanel(true); else { app.panel = id; app.focusNext = 'panel'; render(); } }
     else if (a === 'close-panel') closePanel(true);
     else if (a === 'home-tab') { app.homeTab = el.dataset.tab; render(); }
@@ -1235,6 +1499,72 @@ export function createApp(root, deps) {
       persist();
     }
     else if (a === 'export') { const fname = `tap-protocol-save-${R.localDateStr()}.json`; deps.download(fname, deps.exportJson(app.state)); app.exportMsg = `Export started: ${fname}. Your browser saves it to its usual download location. If nothing arrives, check the browser's downloads list or its permission to download files.`; app.reveal = '[data-msg-export]'; render(); }
+    else if (a === 'start-minigame') {
+      const gameId = el.dataset.game;
+      const session = createMinigameSession(gameId, app.state);
+      if (session) {
+        app.activeMinigame = gameId;
+        app.activeMinigameSession = session;
+        app.minigameResult = null;
+        render();
+      }
+    }
+    else if (a === 'step-minigame') {
+      if (app.activeMinigameSession) {
+        const actionData = { ...el.dataset };
+        if (actionData.choice !== undefined) actionData.choiceIndex = Number(actionData.choice);
+        if (actionData.item !== undefined) actionData.itemIndex = Number(actionData.item);
+        if (actionData.opt !== undefined) actionData.optionIndex = Number(actionData.opt);
+        if (actionData.rhythm !== undefined) actionData.rhythmIndex = Number(actionData.rhythm);
+        if (actionData.contradict !== undefined) actionData.contradictoryIndex = Number(actionData.contradict);
+        const res = stepMinigame(app.activeMinigameSession, actionData);
+        if (res.ok && res.finished) {
+          const outcome = finishMinigame(app.state, app.activeMinigameSession);
+          app.activeMinigame = null;
+          app.activeMinigameSession = null;
+          app.minigameResult = outcome;
+          render();
+          persist();
+        } else {
+          render();
+        }
+      }
+    }
+    else if (a === 'exit-minigame') {
+      app.activeMinigame = null;
+      app.activeMinigameSession = null;
+      render();
+    }
+    else if (a === 'buy-perk') {
+      const pId = el.dataset.perk;
+      const r = R.buyPerk(app.state, pId);
+      if (r.ok) {
+        app.report = { ok: true, title: 'Perk Unlocked', narrative: [r.message], notes: [], changes: [`Unlocked ${r.perk.name}`] };
+        app.reveal = '.report';
+        render();
+        persist();
+      } else {
+        alert(r.error);
+      }
+    }
+    else if (a === 'equip-item') {
+      const itId = el.dataset.item;
+      const r = R.equipItem(app.state, itId);
+      if (r.ok) {
+        render();
+        persist();
+      } else {
+        alert(r.error);
+      }
+    }
+    else if (a === 'unequip-slot') {
+      const slot = el.dataset.slot;
+      const r = R.unequipItem(app.state, slot);
+      if (r.ok) {
+        render();
+        persist();
+      }
+    }
   }
 
   // A double click on a submit button re-submits the freshly emptied form a moment after the first (successful) submit.
@@ -1249,9 +1579,19 @@ export function createApp(root, deps) {
     const fd = new FormData(f);
     const kind = f.dataset.form;
     if (kind === 'create') {
-      app.draft = { name: fd.get('name'), age: fd.get('age'), appearance: fd.get('appearance'), background: fd.get('background'), trait: fd.get('trait'), integration: fd.get('integration') === 'on' };
+      const av = sanitizeAvatar(app.draft.avatar || DEFAULT_AVATAR);
+      app.draft = {
+        name: fd.get('name'),
+        age: fd.get('age'),
+        appearance: fd.get('appearance'),
+        background: fd.get('background'),
+        trait: fd.get('trait'),
+        integration: fd.get('integration') === 'on',
+        avatar: av
+      };
       const res = R.createCharacter(app.draft);
       if (!res.ok) { app.errors = res.errors; app.reveal = '.errors'; render(); return; }
+      res.state.character.avatar = av;
       app.errors = []; app.state = res.state; app.view = 'dashboard'; app.reveal = '.report';
       app.report = { ok: true, title: 'Arrival', narrative: [`You step off the last bus into the Harbor Quarter. It is early on Monday 4 March 2030, and the lane is still wet. ${res.intro}`, 'Find work, find food and find out what this place has for you.'], notes: [], changes: [] };
       render(); persist();
