@@ -372,3 +372,29 @@ main > .panel, main > .window, main > .report { margin-bottom: 0.9rem; }
   .shortcut::after { font-size: 0.75rem; }
 }
 .statusbar:not(.hero) .who { font-family: var(--sans); font-weight: 700; font-size: 1.02rem; }
+
+/* Phase 8 Sensory and Emotional Immersion */
+.chips[aria-label="Emotional & psychological state"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.chips[aria-label="Emotional & psychological state"] .chip {
+  background: var(--c-surface, #FFFEFC);
+  border: 1px solid var(--c-border, #E3DCCE);
+  color: var(--c-forest, #354B3B);
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

@@ -2589,3 +2589,409 @@ export const STORY_TEMPLATES = {
     ]
   }
 };
+
+
+// ==============================================================================
+// PHASE 8: INTELLIGENCE & IMMERSION DATA DEFINITIONS
+// ==============================================================================
+
+export const EMOTIONAL_DIMENSIONS = {
+  mood: { id: 'mood', name: 'Mood', min: 0, max: 100, default: 70, desc: 'Overall emotional tone and positivity' },
+  stress: { id: 'stress', name: 'Stress', min: 0, max: 100, default: 20, desc: 'Tension and cognitive pressure' },
+  motivation: { id: 'motivation', name: 'Motivation', min: 0, max: 100, default: 75, desc: 'Drive to pursue goals and undertake efforts' },
+  socialFulfillment: { id: 'socialFulfillment', name: 'Social Fulfillment', min: 0, max: 100, default: 60, desc: 'Sense of connection and relational warmth' },
+  belonging: { id: 'belonging', name: 'Belonging', min: 0, max: 100, default: 55, desc: 'Connection to community and environment' }
+};
+
+export const NPC_PERSONALITIES = {
+  mira: {
+    id: 'mira',
+    name: 'Mira',
+    traits: ['studious', 'reserved', 'empathetic'],
+    openness: 85,
+    conscientiousness: 90,
+    extraversion: 40,
+    agreeableness: 80,
+    emotionalStability: 75,
+    interests: ['archival restoration', 'urban history', 'botanical tea', 'classical literature'],
+    aspirations: 'Publish an authoritative historical survey of the Harbor Quarter and preserve regional memories.',
+    socialHabits: ['morning quiet study', 'afternoon archive maintenance', 'evening tea by library window'],
+    conversationalStyle: 'reflective and analytical',
+    preferredCategories: ['personal', 'story', 'community'],
+    initiativeThreshold: 30
+  },
+  teo: {
+    id: 'teo',
+    name: 'Teo',
+    traits: ['practical', 'shrewd', 'steadfast'],
+    openness: 50,
+    conscientiousness: 85,
+    extraversion: 65,
+    agreeableness: 60,
+    emotionalStability: 80,
+    interests: ['maritime logistics', 'fair market exchange', 'woodworking', 'dockside anecdotes'],
+    aspirations: 'Maintain the economic independence of the local open market against industrial consolidation.',
+    socialHabits: ['early morning stall setup', 'midday bargaining banter', 'evening inventory counting'],
+    conversationalStyle: 'blunt, grounded, and dryly humorous',
+    preferredCategories: ['professional', 'community', 'conflict_reconciliation'],
+    initiativeThreshold: 25
+  },
+  dani: {
+    id: 'dani',
+    name: 'Dani',
+    traits: ['creative', 'ambitious', 'warm'],
+    openness: 80,
+    conscientiousness: 75,
+    extraversion: 85,
+    agreeableness: 85,
+    emotionalStability: 65,
+    interests: ['specialty coffee roasting', 'pastry craft', 'jazz vinyl', 'community storytelling'],
+    aspirations: 'Turn the Corner Cafe into a celebrated day-and-night cultural haven for local creators.',
+    socialHabits: ['greeting every morning regular', 'cupping new bean harvests', 'late-night recipe drafting'],
+    conversationalStyle: 'warm, expressive, and encouraging',
+    preferredCategories: ['casual', 'personal', 'story', 'relationship'],
+    initiativeThreshold: 20
+  },
+  marcus: {
+    id: 'marcus',
+    name: 'Marcus',
+    traits: ['strategic', 'disciplined', 'driven'],
+    openness: 70,
+    conscientiousness: 95,
+    extraversion: 70,
+    agreeableness: 55,
+    emotionalStability: 85,
+    interests: ['urban infrastructure', 'civic planning', 'marathon training', 'economic data'],
+    aspirations: 'Modernize Metropolis transit and civic infrastructure while safeguarding local workers.',
+    socialHabits: ['brisk dawn exercise', 'high-level planning meetings', 'evening administrative review'],
+    conversationalStyle: 'structured, purposeful, and incisive',
+    preferredCategories: ['professional', 'community', 'story'],
+    initiativeThreshold: 35
+  },
+  elena: {
+    id: 'elena',
+    name: 'Elena',
+    traits: ['scholarly', 'meticulous', 'curious'],
+    openness: 95,
+    conscientiousness: 85,
+    extraversion: 45,
+    agreeableness: 70,
+    emotionalStability: 70,
+    interests: ['distributed algorithms', 'computational ecology', 'chess puzzles', 'academic mentorship'],
+    aspirations: 'Direct groundbreaking ethical research at University Quarter and mentor new fellows.',
+    socialHabits: ['deep lab focus sessions', 'faculty symposium debates', 'solitary quad reading'],
+    conversationalStyle: 'precise, inquisitive, and intellectually stimulating',
+    preferredCategories: ['professional', 'personal', 'community'],
+    initiativeThreshold: 30
+  },
+  chloe: {
+    id: 'chloe',
+    name: 'Chloe',
+    traits: ['visionary', 'innovative', 'independent'],
+    openness: 90,
+    conscientiousness: 70,
+    extraversion: 75,
+    agreeableness: 65,
+    emotionalStability: 70,
+    interests: ['software architecture', 'indie hardware', 'open-source ethics', 'synthwave compositions'],
+    aspirations: 'Scale independent community tech solutions without selling out to venture conglomerates.',
+    socialHabits: ['hackathon marathons', 'casual cafe brainstorming', 'nighttime code commits'],
+    conversationalStyle: 'quick-witted, tech-savvy, and direct',
+    preferredCategories: ['casual', 'professional', 'relationship'],
+    initiativeThreshold: 25
+  },
+  julian: {
+    id: 'julian',
+    name: 'Julian',
+    traits: ['adventurous', 'harmonious', 'resilient'],
+    openness: 75,
+    conscientiousness: 70,
+    extraversion: 80,
+    agreeableness: 90,
+    emotionalStability: 90,
+    interests: ['coastal sailing', 'tide ecology', 'restorative athletics', 'acoustic guitar'],
+    aspirations: 'Restore the waterfront marina basin and establish an accessible coastal sports club.',
+    socialHabits: ['checking mooring ropes at sunrise', 'leading waterfront run clubs', 'dockside jam sessions'],
+    conversationalStyle: 'relaxed, open-hearted, and spirited',
+    preferredCategories: ['casual', 'relationship', 'community'],
+    initiativeThreshold: 20
+  }
+};
+
+export const CONTEXTUAL_CONVERSATIONS = [
+  // 1. Casual
+  {
+    id: 'casual_morning_coffee',
+    category: 'casual',
+    label: 'Share thoughts on the morning atmosphere',
+    desc: 'Exchange light observations about the weather, morning coffee, and neighborhood sights.',
+    applicableNpcs: ['dani', 'teo', 'mira', 'chloe', 'julian', 'marcus', 'elena'],
+    timeCheck: (hour) => hour >= 6 && hour <= 11,
+    minRel: 0,
+    responses: {
+      dani: 'The morning light through the cafe glass is special today. You look ready for whatever comes next.',
+      teo: 'Good breeze off the water today. Stalls are moving early, that is always a decent sign.',
+      mira: 'The reading hall is quiet at this hour. You can hear the leaves in the courtyard outside.',
+      default: 'A pleasant exchange about the morning calm and the day ahead.'
+    },
+    emotionalImpact: { mood: 4, stress: -3, socialFulfillment: 4 },
+    rewards: { exp: 3, skillExp: { conversation: 4 } }
+  },
+  {
+    id: 'casual_evening_wind_down',
+    category: 'casual',
+    label: 'Reflect on the day winding down',
+    desc: 'Talk quietly about how the day transpired and the relaxed evening atmosphere.',
+    applicableNpcs: ['dani', 'teo', 'mira', 'julian', 'chloe'],
+    timeCheck: (hour) => hour >= 18 || hour <= 23,
+    minRel: 5,
+    responses: {
+      julian: 'Sunset over the marina piers never gets old. Good to pause and breathe after a full day.',
+      dani: 'We are turning the cafe lamps low for evening jazz. Stay a while and rest.',
+      mira: 'Shelving the last volumes as the streetlights flicker on is my favorite hour.',
+      default: 'A mellow conversation offering a restful close to the daylight hours.'
+    },
+    emotionalImpact: { mood: 5, stress: -5, socialFulfillment: 4 },
+    rewards: { exp: 3, skillExp: { conversation: 4 } }
+  },
+  // 2. Personal
+  {
+    id: 'personal_hopes_aspirations',
+    category: 'personal',
+    label: 'Discuss personal aspirations and long-term goals',
+    desc: 'Confide your hopes for building a life here and listen to their personal aspirations.',
+    applicableNpcs: ['mira', 'dani', 'elena', 'marcus', 'chloe'],
+    minRel: 25,
+    responses: {
+      mira: 'Preserving the real stories of this city is what keeps me grounded. What kind of mark do you want to leave?',
+      dani: 'I want this space to outlive me as a place where anyone can sit and feel understood.',
+      elena: 'Knowledge only matters if it elevates the people around us. I see that drive in your work too.',
+      marcus: 'Discipline over time builds real structures. Keep your foundation solid, Pithe.',
+      default: 'You shared sincere thoughts on your path, finding genuine resonance in their perspective.'
+    },
+    emotionalImpact: { mood: 6, motivation: 8, socialFulfillment: 6 },
+    rewards: { exp: 6, skillExp: { conversation: 6 } }
+  },
+  {
+    id: 'personal_vulnerability_support',
+    category: 'personal',
+    label: 'Open up about fatigue or uncertainties',
+    desc: 'Share the weight of recent challenges and seek a grounded perspective.',
+    applicableNpcs: ['dani', 'mira', 'julian'],
+    minRel: 30,
+    responses: {
+      dani: 'Hey, take a breath. You are carrying a lot, but you do not have to carry it in silence. You have friends here.',
+      mira: 'Every journey documented in our archives has its quiet plateaus. Do not mistake patience for defeat.',
+      julian: 'Even the strongest tides turn slowly. Walk along the water with me anytime you need to reset.',
+      default: 'They listened attentively, offering reassurance that softened your worries.'
+    },
+    emotionalImpact: { mood: 6, stress: -10, socialFulfillment: 8 },
+    rewards: { exp: 5, skillExp: { conversation: 5 } }
+  },
+  // 3. Professional
+  {
+    id: 'professional_industry_trends',
+    category: 'professional',
+    label: 'Discuss industry developments and urban commerce',
+    desc: 'Analyze metropolitan economic trends, project pipelines, and career growth.',
+    applicableNpcs: ['marcus', 'teo', 'elena', 'chloe'],
+    minRel: 15,
+    responses: {
+      marcus: 'Efficiency without integrity is hollow. The city is expanding, and those who deliver real value will shape it.',
+      teo: 'Keep an eye on supply chains and who controls distribution. Real leverage is knowing the source.',
+      chloe: 'The tech sector is hungry for people who can actually build durable things without excessive hype.',
+      elena: 'Rigorous methodology always triumphs over quick shortcuts in the long cycle.',
+      default: 'A substantive, high-level discussion on professional standards and economic opportunity.'
+    },
+    emotionalImpact: { motivation: 7, stress: 2, mood: 2 },
+    rewards: { exp: 6, skillExp: { negotiation: 6, conversation: 4 } }
+  },
+  // 4. Relationship Development
+  {
+    id: 'relationship_gratitude_bond',
+    category: 'relationship',
+    label: 'Express gratitude for their companionship and trust',
+    desc: 'Acknowledge how much their presence and shared experiences have meant to you.',
+    applicableNpcs: ['dani', 'mira', 'julian', 'teo', 'chloe', 'elena', 'marcus'],
+    minRel: 40,
+    responses: {
+      dani: 'That means the world to me, Pithe. Genuine companions are rare in a city this big.',
+      teo: 'I do not say it often, but having you around makes the harbor feel more like home.',
+      julian: 'Partners in crime and harbor life! Truly grateful we crossed paths.',
+      mira: 'You have brought warmth to what used to be a very quiet corner of my world.',
+      default: 'Your expression of loyalty and warmth deepened your bond visibly.'
+    },
+    emotionalImpact: { mood: 8, socialFulfillment: 10, belonging: 8 },
+    rewards: { exp: 8, skillExp: { conversation: 8 }, relDelta: 4 }
+  },
+  // 5. Family
+  {
+    id: 'family_legacy_traditions',
+    category: 'family',
+    label: 'Discuss family traditions and multigenerational roots',
+    desc: 'Talk about generational heritage, childhood lessons, and what family means.',
+    applicableNpcs: ['mira', 'teo', 'marcus', 'dani'],
+    minRel: 20,
+    responses: {
+      mira: 'Family history is more than names on paper; it is the habits and quiet values passed down through generations.',
+      teo: 'My grandfather built our first dock cart with his bare hands. You keep what was good and leave the rest behind.',
+      marcus: 'Generations should elevate one another. That is the highest duty of a household.',
+      default: 'A thoughtful dialogue regarding kinship, heritage, and generational responsibilities.'
+    },
+    emotionalImpact: { belonging: 8, mood: 4, socialFulfillment: 5 },
+    rewards: { exp: 5, skillExp: { conversation: 5 } }
+  },
+  // 6. Community
+  {
+    id: 'community_civic_wellbeing',
+    category: 'community',
+    label: 'Discuss neighborhood projects and district vitality',
+    desc: 'Converse about public improvements, local cultural life, and community cohesion.',
+    applicableNpcs: ['marcus', 'dani', 'teo', 'julian', 'mira'],
+    minRel: 10,
+    responses: {
+      marcus: 'Civic spaces succeed when residents actively invest their care into them.',
+      teo: 'The harbor only thrives if the small shops and market vendors pull together.',
+      julian: 'A clean waterfront gives everyone a shared space to breathe and play.',
+      dani: 'Cultural vitality begins with small acts of gathering people together over good food.',
+      default: 'You exchanged productive ideas on strengthening local district life and community support.'
+    },
+    emotionalImpact: { belonging: 7, motivation: 5, mood: 3 },
+    rewards: { exp: 5, skillExp: { conversation: 5 } }
+  },
+  // 7. Story-Related
+  {
+    id: 'story_neighborhood_observations',
+    category: 'story',
+    label: 'Inquire about recent happenings and city developments',
+    desc: 'Discuss local gossip, developing urban initiatives, and intriguing events.',
+    applicableNpcs: ['dani', 'teo', 'mira', 'chloe', 'julian', 'marcus', 'elena'],
+    minRel: 10,
+    responses: {
+      teo: 'Word on the pier is that several new initiatives are underway across the districts.',
+      mira: 'Our archives just received records detailing past civic transitions that mirror today.',
+      chloe: 'Tech corridor is buzzing with quiet talk about upcoming collaborations.',
+      default: 'They shared interesting tidbits regarding evolving neighborhood storylines and events.'
+    },
+    emotionalImpact: { mood: 4, motivation: 4 },
+    rewards: { exp: 4, skillExp: { observation: 5, conversation: 4 } }
+  },
+  // 8. Conflict & Reconciliation
+  {
+    id: 'conflict_reconcile_differences',
+    category: 'conflict_reconciliation',
+    label: 'Clear the air and mend relational friction',
+    desc: 'Address past misunderstandings with sincerity and restore mutual respect.',
+    applicableNpcs: ['teo', 'marcus', 'chloe', 'dani', 'mira', 'elena', 'julian'],
+    minRel: -50,
+    responses: {
+      teo: 'Takes backbone to address things straight on. Water under the bridge, Pithe.',
+      marcus: 'Directness is always preferable to quiet resentment. We move forward from here.',
+      chloe: 'Appreciate you saying that. Let us get back on good terms.',
+      default: 'A candid conversation that dissolved lingering tensions and restored equilibrium.'
+    },
+    emotionalImpact: { mood: 6, stress: -8, socialFulfillment: 8 },
+    rewards: { exp: 8, skillExp: { negotiation: 6, conversation: 6 }, relDelta: 8 }
+  }
+];
+
+export const PHASE8_ACTIVITIES = {
+  morning_routine: {
+    id: 'morning_routine',
+    name: 'Morning Routine & Mindful Preparation',
+    desc: 'Stretch, brew fresh tea or coffee, and set calm intentions for the day ahead.',
+    where: ['home'],
+    minutes: 30,
+    energy: 5,
+    satiety: 5,
+    story: {
+      home: 'The quiet morning air carries the scent of fresh brew. You take time to organize your thoughts and start the day grounded.',
+      default: 'You take time to organize your thoughts and prepare for the day.'
+    }
+  },
+  evening_unwind: {
+    id: 'evening_unwind',
+    name: 'Evening Unwind & Reflection',
+    desc: 'Dim the lamps, put on calm music, and reflect peacefully on today achievements.',
+    where: ['home'],
+    minutes: 45,
+    energy: 10,
+    satiety: 0,
+    story: {
+      home: 'Outside, the city hum slows. You dim the desk lamp, stretch, and let the tensions of the day dissolve into quiet comfort.',
+      default: 'You let the tensions of the day dissolve into quiet comfort.'
+    }
+  },
+  household_maintenance: {
+    id: 'household_maintenance',
+    name: 'Tidy & Organize Living Space',
+    desc: 'Organize your room, dust shelves, and create an orderly, uplifting home environment.',
+    where: ['home'],
+    minutes: 45,
+    energy: -8,
+    satiety: -3,
+    story: {
+      home: 'You sweep the floorboards, straighten your desk books, and open the window to let fresh air circulate through your room.',
+      default: 'You sweep the floorboards and create an orderly, tidy environment.'
+    }
+  },
+  leisure_reading: {
+    id: 'leisure_reading',
+    name: 'Leisure Reading & Cultural Browsing',
+    desc: 'Immerse yourself in poetry, essays, or local journals purely for personal enjoyment.',
+    where: ['home', 'library', 'cafe'],
+    minutes: 60,
+    energy: -5,
+    satiety: -2,
+    story: {
+      library: 'Surrounded by the soft rustle of book pages and polished timber, you lose yourself in fascinating literature.',
+      cafe: 'Sipping a warm beverage as acoustic melodies play, you spend an engrossing hour reading.',
+      home: 'Curled up by the window, you enjoy undisturbed leisure reading as sunlight washes across the floor.',
+      default: 'You lose yourself in fascinating, enriching literature.'
+    }
+  },
+  neighborhood_walk: {
+    id: 'neighborhood_walk',
+    name: 'Sensory Stroll & District Observation',
+    desc: 'Take an unhurried walk to observe urban architecture, maritime breezes, and street life.',
+    where: ['market', 'downtown', 'marina', 'tech_park', 'university'],
+    minutes: 45,
+    energy: -10,
+    satiety: -4,
+    story: {
+      marina: 'The gentle lap of saltwater against hulls and cries of coastal gulls provide a peaceful cadence to your stroll.',
+      market: 'Vibrant merchant banter and aromas of roasted nuts and spices surround you as you wander the lantern aisles.',
+      downtown: 'Grand stone facades and the steady rhythm of city commuters provide an inspiring backdrop to your walk.',
+      university: 'Shaded oak walkways and students debating between lecture halls stimulate your thoughts.',
+      tech_park: 'Sleek glass atriums and landscaped water fountains offer a serene, futuristic urban atmosphere.',
+      default: 'You take an unhurried walk, absorbing the sights and sounds of the district.'
+    }
+  }
+};
+
+export const ATMOSPHERE_PROFILES = {
+  periods: {
+    morning: { label: 'Morning Calm', ambience: 'Soft sunlight illuminates cobblestones as the city awakens.', sky: 'clear amber' },
+    midday: { label: 'Midday Vitality', ambience: 'Foot traffic peaks under bright daylight and brisk breezes.', sky: 'bright azure' },
+    afternoon: { label: 'Afternoon Flow', ambience: 'Long shadows stretch across warm brickwork and bustling shops.', sky: 'golden ochre' },
+    evening: { label: 'Evening Radiance', ambience: 'Lanterns flicker to life and warm music spills from cafes.', sky: 'deep violet' },
+    night: { label: 'Night Tranquility', ambience: 'Quiet lanes reflect the soft glow of streetlamps and harbor stars.', sky: 'midnight indigo' }
+  },
+  weatherTypes: [
+    { id: 'crisp_clear', name: 'Crisp & Clear', desc: 'Pleasant temperate breeze with sharp visibility', moodMod: 3, stressMod: -2 },
+    { id: 'gentle_overcast', name: 'Gentle Overcast', desc: 'Soft diffused cloud cover and cool ambient air', moodMod: 0, stressMod: -1 },
+    { id: 'harbor_mist', name: 'Harbor Mist', desc: 'Moist sea spray drifting gently through coastal quarters', moodMod: 1, stressMod: -1 },
+    { id: 'autumnal_breeze', name: 'Autumnal Breeze', desc: 'Invigorating cool gusts rustling courtyard leaves', moodMod: 2, stressMod: -2 },
+    { id: 'golden_sunlight', name: 'Golden Sunlight', desc: 'Warm radiant sunbeams filling plazas and open avenues', moodMod: 5, stressMod: -4 }
+  ]
+};
+
+export const BIOGRAPHY_CATEGORIES = {
+  VERIFIED_EVENT: 'verified_event',
+  PLAYER_DECISION: 'player_decision',
+  NPC_RECOLLECTION: 'npc_recollection',
+  ORAL_HISTORY: 'oral_history',
+  RUMOR: 'rumor'
+};
+
+Object.assign(ACTIVITIES, PHASE8_ACTIVITIES);

@@ -140,6 +140,7 @@ export function createCharacter(o = {}) {
   ensurePhase5(state);
   ensurePhase6(state);
   ensurePhase7(state);
+  ensurePhase8(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -181,6 +182,7 @@ export function migrateState(s) {
   ensurePhase5(s);
   ensurePhase6(s);
   ensurePhase7(s);
+  ensurePhase8(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -843,6 +845,7 @@ export function processWorldSimulation(state) {
   processEmergentStories(state);
   processNpcFamilyDynamics(state);
   processLivingUniverse(state);
+  processPhase8Simulation(state);
 }
 
 export function processLocationDevelopment(state) {
@@ -3966,6 +3969,8 @@ export function execute(state, action, opts = {}) {
     case 'project_contribute': res = doProjectContribute(state, action.projectId); break;
     case 'business_collaborate': res = doBusinessCollaborate(state, action.bizId, action.collabType); break;
     case 'phase7_event_participate': res = doPhase7EventParticipate(state, action.eventId); break;
+    case 'contextual_talk': res = doContextualTalk(state, action.npc, action.topic); break;
+    case 'audio_setting': res = doAudioSetting(state, action.setting, action.value); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
@@ -4664,4 +4669,334 @@ export function doCareerMentorship(state, npcId) {
       `Your work performance rose by +${boost} points (Current Performance: ${state.career.performance}/100).`
     ]
   };
+}
+
+
+// ==============================================================================
+// PHASE 8: INTELLIGENCE & IMMERSION SIMULATION RULES
+// ==============================================================================
+
+export function ensurePhase8(state) {
+  if (!state.emotions) {
+    state.emotions = {
+      mood: 70,
+      stress: 20,
+      motivation: 75,
+      socialFulfillment: 60,
+      belonging: 55,
+      lastUpdateClock: state.clock || 0
+    };
+  }
+
+  if (!state.npcIntelligence) {
+    state.npcIntelligence = {};
+    for (const [id, pDef] of Object.entries(D.NPC_PERSONALITIES || {})) {
+      state.npcIntelligence[id] = {
+        id,
+        personality: { ...pDef },
+        emotionalState: {
+          mood: 75,
+          stress: 15,
+          socialFulfillment: 70
+        },
+        initiativePending: null,
+        lastInteractionClock: state.clock || 0,
+        interactionHistory: []
+      };
+    }
+  }
+
+  if (!state.narrativeArchive) {
+    state.narrativeArchive = {
+      biographyEntries: [],
+      lastCompiledClock: 0
+    };
+  }
+
+  if (!state.atmosphere) {
+    state.atmosphere = {
+      currentWeather: 'crisp_clear',
+      currentPeriod: 'morning',
+      lastWeatherDay: ''
+    };
+  }
+
+  if (!state.audioSettings) {
+    state.audioSettings = {
+      enabled: false,
+      volume: 0.5,
+      muted: false
+    };
+  }
+
+  if (!state.flags.phase8Talk) {
+    state.flags.phase8Talk = {};
+  }
+}
+
+export function adjustEmotions(state, delta) {
+  ensurePhase8(state);
+  const em = state.emotions;
+  for (const [k, v] of Object.entries(delta || {})) {
+    if (em[k] !== undefined && typeof v === 'number') {
+      const dim = D.EMOTIONAL_DIMENSIONS[k];
+      const min = dim ? dim.min : 0;
+      const max = dim ? dim.max : 100;
+      em[k] = clamp(em[k] + v, min, max);
+    }
+  }
+}
+
+export function processEnvironmentalAtmosphere(state) {
+  ensurePhase8(state);
+  const hour = hourOf(state.clock);
+  let period = 'night';
+  if (hour >= 6 && hour < 11) period = 'morning';
+  else if (hour >= 11 && hour < 14) period = 'midday';
+  else if (hour >= 14 && hour < 18) period = 'afternoon';
+  else if (hour >= 18 && hour < 22) period = 'evening';
+  state.atmosphere.currentPeriod = period;
+
+  const curDay = dayKey(state.clock);
+  if (state.atmosphere.lastWeatherDay !== curDay) {
+    state.atmosphere.lastWeatherDay = curDay;
+    const types = D.ATMOSPHERE_PROFILES.weatherTypes || [];
+    if (types.length) {
+      const idx = Math.abs((state.clock * 7 + 13)) % types.length;
+      state.atmosphere.currentWeather = types[idx].id;
+    }
+  }
+}
+
+export function processNpcInitiatives(state) {
+  ensurePhase8(state);
+  const curDay = dayKey(state.clock);
+  if (state.lastInitiativeDay === curDay) return;
+  state.lastInitiativeDay = curDay;
+
+  for (const [npcId, intel] of Object.entries(state.npcIntelligence)) {
+    const rel = state.relations[npcId] || 0;
+    const p = intel.personality;
+    if (rel >= (p.initiativeThreshold || 25) && !intel.initiativePending) {
+      if (npcId === 'dani' && state.location === 'cafe') {
+        intel.initiativePending = {
+          type: 'activity_invite',
+          title: 'Dani Coffee Tasting Invitation',
+          desc: 'Dani noticed your interest in culinary craft and invited you to cup a new coffee roast batch together.',
+          topicId: 'casual_morning_coffee'
+        };
+      } else if (npcId === 'mira' && state.location === 'library') {
+        intel.initiativePending = {
+          type: 'support_offer',
+          title: 'Mira Archival Conversation',
+          desc: 'Mira set aside an interesting Harbor history manuscript and invites you to review it.',
+          topicId: 'personal_hopes_aspirations'
+        };
+      } else if (npcId === 'julian' && state.location === 'marina') {
+        intel.initiativePending = {
+          type: 'recreation_invite',
+          title: 'Julian Waterfront Stroll',
+          desc: 'Julian waved you over to watch the evening tide and share dockside stories.',
+          topicId: 'casual_evening_wind_down'
+        };
+      }
+    }
+  }
+}
+
+export function processPhase8Simulation(state) {
+  ensurePhase8(state);
+  processEnvironmentalAtmosphere(state);
+  processNpcInitiatives(state);
+
+  // Passive emotional regulation: slow natural regression toward baseline
+  const em = state.emotions;
+  if (em.stress > 20) em.stress = Math.max(20, em.stress - 1);
+  if (em.mood < 65) em.mood = Math.min(65, em.mood + 1);
+}
+
+export function doContextualTalk(state, npcId, topicId) {
+  ensurePhase8(state);
+  const npc = D.NPCS[npcId];
+  if (!npc) return { error: 'Unknown individual.' };
+  if (npcLocation(npcId, state.clock) !== state.location) return { error: `${npc.name} is not here right now.` };
+
+  const topic = D.CONTEXTUAL_CONVERSATIONS.find((t) => t.id === topicId);
+  if (!topic) return { error: 'Unknown conversation topic.' };
+  if (topic.applicableNpcs && !topic.applicableNpcs.includes(npcId)) {
+    return { error: `${npc.name} is not inclined to discuss this subject.` };
+  }
+
+  const curRel = state.relations[npcId] || 0;
+  if (topic.minRel !== undefined && curRel < topic.minRel) {
+    return { error: `${npc.name} does not know you well enough for this conversation (needs ${topic.minRel} trust).` };
+  }
+
+  const hour = hourOf(state.clock);
+  if (topic.timeCheck && !topic.timeCheck(hour)) {
+    return { error: 'The timing feels unsuitable for this conversation right now.' };
+  }
+
+  // Exploit prevention: check daily count for this topic with this NPC
+  const day = dayKey(state.clock);
+  const talkKey = `${day}:${npcId}:${topicId}`;
+  const count = state.flags.phase8Talk[talkKey] || 0;
+  if (count >= 2) {
+    return { error: 'You have already explored this conversation deeply today. Give them time before revisiting.' };
+  }
+  state.flags.phase8Talk[talkKey] = count + 1;
+
+  if (advance(state, 30)) return { title: 'Conversation Interrupted', narrative: ['The discussion was cut short.'] };
+
+  // Adjust emotions
+  if (topic.emotionalImpact) {
+    adjustEmotions(state, topic.emotionalImpact);
+  }
+
+  // Adjust relationship
+  const relDelta = topic.rewards?.relDelta || 3;
+  addRel(state, npcId, relDelta);
+  if (state.relationships && state.relationships[npcId]) {
+    state.relationships[npcId].trust = clamp(state.relationships[npcId].trust + relDelta, -100, 100);
+    state.relationships[npcId].affinity = clamp(state.relationships[npcId].affinity + relDelta, 0, 100);
+  }
+
+  // Grant rewards
+  if (topic.rewards) {
+    if (topic.rewards.exp) grantExp(state, topic.rewards.exp);
+    if (topic.rewards.skillExp) {
+      for (const [sk, amt] of Object.entries(topic.rewards.skillExp)) {
+        grantSkillExp(state, sk, amt);
+      }
+    }
+  }
+
+  const responseText = topic.responses[npcId] || topic.responses.default;
+  const narrative = [
+    `You and ${npc.name} engaged in a thoughtful dialogue: "${topic.label}".`,
+    `"${responseText}"`
+  ];
+
+  // Record NPC memory
+  recordNpcMemory(state, npcId, {
+    sourceEntity: 'pithe',
+    title: `Conversed with Pithe: ${topic.label}`,
+    context: responseText,
+    importance: D.MEMORY_IMPORTANCE.NOTABLE,
+    clock: state.clock
+  });
+
+  // Clear pending initiative if matching
+  const intel = state.npcIntelligence[npcId];
+  if (intel && intel.initiativePending && intel.initiativePending.topicId === topicId) {
+    intel.initiativePending = null;
+  }
+
+  NOTES.push(`Engaged in ${topic.category} conversation with ${npc.name}.`);
+
+  return {
+    title: `Conversation with ${npc.name}`,
+    narrative
+  };
+}
+
+export function doAudioSetting(state, setting, value) {
+  ensurePhase8(state);
+  if (setting === 'enabled') {
+    state.audioSettings.enabled = !!value;
+  } else if (setting === 'volume') {
+    state.audioSettings.volume = clamp(Number(value) || 0.5, 0, 1);
+  } else if (setting === 'muted') {
+    state.audioSettings.muted = !!value;
+  }
+  return {
+    title: 'Audio Settings Updated',
+    narrative: [`Audio settings updated: ${setting} = ${value}`],
+    noLog: true
+  };
+}
+
+export function generatePersonalBiography(state) {
+  ensurePhase8(state);
+  ensureChronicle(state);
+  ensureWorldMemory(state);
+
+  const bio = [];
+
+  // 1. Verified chronicle milestones
+  for (const c of (state.chronicle || [])) {
+    bio.push({
+      category: D.BIOGRAPHY_CATEGORIES.VERIFIED_EVENT,
+      source: 'Verified Chronicle',
+      clock: c.clock,
+      date: c.date,
+      title: c.title,
+      text: c.desc,
+      verified: true
+    });
+  }
+
+  // 2. Story decisions
+  for (const st of (state.stories?.history || [])) {
+    bio.push({
+      category: D.BIOGRAPHY_CATEGORIES.PLAYER_DECISION,
+      source: 'Storyline Decision',
+      clock: st.resolvedClock,
+      date: formatDateOnly(st.resolvedClock),
+      title: st.title,
+      text: `Resolution: ${(st.outcomeState || '').replace(/_/g, ' ')}. ${st.summary}`,
+      verified: true
+    });
+  }
+
+  // 3. NPC recollections
+  for (const [npcId, intel] of Object.entries(state.npcSim || {})) {
+    for (const m of (intel.memories || [])) {
+      if (m.sourceEntity === 'pithe' || (m.context && m.context.includes('Pithe'))) {
+        bio.push({
+          category: D.BIOGRAPHY_CATEGORIES.NPC_RECOLLECTION,
+          source: `${D.NPCS[npcId]?.name || npcId}'s Personal Recollection`,
+          clock: m.clock || state.clock,
+          date: formatDateOnly(m.clock || state.clock),
+          title: m.title,
+          text: m.context,
+          verified: false
+        });
+      }
+    }
+  }
+
+  // 4. Family oral histories
+  for (const h of (state.family?.oralHistory || [])) {
+    bio.push({
+      category: h.verified ? D.BIOGRAPHY_CATEGORIES.VERIFIED_EVENT : D.BIOGRAPHY_CATEGORIES.ORAL_HISTORY,
+      source: `Family Lore (${h.source || 'Ancestral'})`,
+      clock: 0,
+      date: 'Generational Archive',
+      title: h.title,
+      text: h.text,
+      verified: !!h.verified
+    });
+  }
+
+  // 5. Rumors
+  for (const m of (state.memories || [])) {
+    if (m.isRumor && !m.verified) {
+      bio.push({
+        category: D.BIOGRAPHY_CATEGORIES.RUMOR,
+        source: 'Metropolitan Rumor Mill',
+        clock: m.clock || 0,
+        date: m.date || 'Circulating',
+        title: m.title,
+        text: m.context,
+        verified: false
+      });
+    }
+  }
+
+  bio.sort((a, b) => (b.clock || 0) - (a.clock || 0));
+
+  state.narrativeArchive.biographyEntries = bio;
+  state.narrativeArchive.lastCompiledClock = state.clock;
+  return bio;
 }

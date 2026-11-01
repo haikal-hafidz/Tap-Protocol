@@ -1,3 +1,30 @@
+let audioCtx = null;
+function playChime(freq = 440, duration = 0.12, settings = null) {
+  if (!settings || !settings.enabled || settings.muted) return;
+  try {
+    if (!audioCtx && typeof window !== 'undefined' && (window.AudioContext || window.webkitAudioContext)) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    if (audioCtx) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+      gain.gain.setValueAtTime((settings.volume || 0.5) * 0.1, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + duration);
+    }
+  } catch (e) {
+    // Audio is strictly optional and safe when unsupported
+  }
+}
 // TAP Protocol - interface. Renders HTML strings into one root element and handles events by delegation.
 // Every control carries data-action (clicks) or data-form (submits). No emojis anywhere in this project.
 import * as D from './data.js';
@@ -135,6 +162,7 @@ export function createApp(root, deps) {
     const tile = (label, v, cls) => `<div class="stat"><span>${label}</span><b>${v}</b>${bar(v, 100, cls, label)}</div>`;
     return `<section class="hero statusbar" aria-label="Status summary">
       <div class="hero-top"><div><div class="eyebrow">Player status</div><h2><button class="who" data-action="nav" data-view="character" aria-label="${esc(c.name)}, level ${c.level}. Open Progress">${esc(c.name)}</button></h2><p>${esc(D.LOCATIONS[s.location].name)}</p></div><span class="level">Level ${c.level}</span></div>
+      ${s.emotions ? `<div class="chips" aria-label="Emotional & psychological state"><span class="chip">Mood: ${s.emotions.mood}/100</span><span class="chip">Stress: ${s.emotions.stress}/100</span><span class="chip">Motivation: ${s.emotions.motivation}/100</span><span class="chip">Atmosphere: ${esc(s.atmosphere?.currentPeriod || 'Day')} (${esc((s.atmosphere?.currentWeather || '').replace(/_/g, ' '))})</span></div>` : ''}
       <div class="meter">${bar(c.exp, need, 'exp', 'EXP')}</div><div class="small">${c.exp} / ${need} EXP</div>
       <div class="stats">${tile('Health', n.health, 'health')}${tile('Energy', n.energy, 'energy')}${tile('Satiety', n.satiety, 'satiety')}<div class="stat"><span>Money</span><b>${s.money}</b></div></div>
       ${tags.length ? `<p class="tags">${tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</p>` : ''}
@@ -327,6 +355,7 @@ export function createApp(root, deps) {
       : '<p>No achievements earned yet. Explore the world, master skills, and enter competitions to unlock achievements.</p>';
     const recent = s.log.filter((l) => l.changes.some((x) => /EXP|level|training|to \d+$/.test(x))).slice(-6).reverse();
     return `<section class="hero window" aria-label="Character overview"><div class="hero-top"><div><div class="eyebrow">Character overview</div><h2>${esc(c.name)}</h2><p>Age ${c.age}. Hardcore.</p></div><span class="level">Level ${c.level}</span></div>
+      ${s.emotions ? `<div class="chips" aria-label="Emotional & psychological state"><span class="chip">Mood: ${s.emotions.mood}/100</span><span class="chip">Stress: ${s.emotions.stress}/100</span><span class="chip">Motivation: ${s.emotions.motivation}/100</span><span class="chip">Atmosphere: ${esc(s.atmosphere?.currentPeriod || 'Day')} (${esc((s.atmosphere?.currentWeather || '').replace(/_/g, ' '))})</span></div>` : ''}
       <p class="appearance">${esc(c.appearance || 'No appearance description yet.')}</p>
       <div class="meter">${bar(c.exp, R.expNeed(c.level), 'exp', 'EXP')}</div><div class="small">${c.exp} / ${R.expNeed(c.level)} EXP</div>
       <dl class="facts stats"><div class="stat"><dt>Background</dt><dd>${esc(bg.name)}</dd></div><div class="stat"><dt>Trait</dt><dd>${esc(tr.name)}</dd></div><div class="stat"><dt>EXP</dt><dd>${c.exp}/${R.expNeed(c.level)}</dd></div><div class="stat"><dt>Collapses</dt><dd>${s.stats.collapses}</dd></div></dl></section>
@@ -342,6 +371,11 @@ export function createApp(root, deps) {
     return `<section class="panel" id="settings"><h2>Settings and save data</h2>
         <p>Real-life tracker rewards: <strong>${s.settings.integration ? 'Enabled' : 'Disabled'}</strong>. When enabled, a recorded real-life completion on a goal you linked to the RPG gives a small reward, up to 3 per real day.</p>
         <button class="btn" data-action="toggle-integration">${s.settings.integration ? 'Disable' : 'Enable'} real-life rewards</button>
+        <div class="sub-head"><h3>Sensory & Environmental Audio</h3><p class="hint">Optional synthesized ambient chimes and tonal feedback (Web Audio API). No external media.</p></div>
+        <div class="row">
+          <button class="btn" data-action="toggle-audio">${s.audioSettings?.enabled ? 'Disable' : 'Enable'} ambient audio</button>
+          ${s.audioSettings?.enabled ? `<button class="btn" data-action="toggle-audio-mute">${s.audioSettings?.muted ? 'Unmute' : 'Mute'} sound</button>` : ''}
+        </div>
         <p class="hint">Storage: ${esc(deps.storageMode())}. Export your save regularly. Clearing browser data erases it.</p>
         <div class="row"><button class="btn" data-action="export">Export save file</button></div>${app.exportMsg ? `<p class="notice" role="status" data-msg-export>${esc(app.exportMsg)}</p>` : ''}
         <form data-form="import" class="stack"><label>Import a save (paste JSON). This replaces the current game.<textarea name="json" rows="3"></textarea></label>${app.importError ? `<p class="error" role="alert" data-msg>${esc(app.importError)}</p>` : ''}<button class="btn" type="submit">Import save</button></form>
@@ -351,7 +385,7 @@ export function createApp(root, deps) {
   }
 
   function journalView(s) {
-    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'stories' ? 'on' : ''}" data-action="tab" data-tab="stories" aria-pressed="${app.journalTab === 'stories'}">Stories</button><button class="tab ${app.journalTab === 'family_history' ? 'on' : ''}" data-action="tab" data-tab="family_history" aria-pressed="${app.journalTab === 'family_history'}">Family Lineage</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'stories' ? 'on' : ''}" data-action="tab" data-tab="stories" aria-pressed="${app.journalTab === 'stories'}">Stories</button><button class="tab ${app.journalTab === 'family_history' ? 'on' : ''}" data-action="tab" data-tab="family_history" aria-pressed="${app.journalTab === 'family_history'}">Family Lineage</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'biography' ? 'on' : ''}" data-action="tab" data-tab="biography" aria-pressed="${app.journalTab === 'biography'}">Personal Biography</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
     if (app.journalTab === 'stories') {
       const activeStories = (s.stories?.active || []).filter((st) => s.stories?.discovered?.[st.id]);
       const historyStories = [...(s.stories?.history || [])].reverse();
@@ -381,6 +415,22 @@ export function createApp(root, deps) {
       return `${tabs}<section class="panel"><h2>Discovered Active Storylines</h2><ul class="actions">${activeHtml}</ul></section>
         <section class="panel"><h2>Storyline Chronicle & Resolutions</h2><ul class="history">${historyHtml}</ul></section>`;
     }
+    if (app.journalTab === 'biography') {
+      const bio = R.generatePersonalBiography(s);
+      const verified = bio.filter((b) => b.verified);
+      const subjective = bio.filter((b) => !b.verified);
+      return `${tabs}<section class="panel"><h2>Personal Narrative & Living Biography</h2>
+        <p class="hint">An authentic personal history woven entirely from verified gameplay milestones, player decisions, NPC recollections, and oral heritage. No fabricated records.</p>
+        <div class="cols">
+          <section class="panel"><h3>Verified Historical Records (${verified.length})</h3>
+            ${verified.length ? `<ul class="history">${verified.slice(0, 30).map((v) => `<li><div class="attr-top"><strong>${esc(v.title)}</strong><span class="tag good">${esc(v.source)}</span></div><small>${esc(v.date)}</small><p class="story">${esc(v.text)}</p></li>`).join('')}</ul>` : '<p>No verified milestones recorded yet.</p>'}
+          </section>
+          <section class="panel"><h3>Subjective Lore & Recollections (${subjective.length})</h3>
+            ${subjective.length ? `<ul class="history">${subjective.slice(0, 30).map((u) => `<li><div class="attr-top"><strong>${esc(u.title)}</strong><span class="tag warn">${esc(u.source)}</span></div><small>${esc(u.date)}</small><p class="story">${esc(u.text)}</p></li>`).join('')}</ul>` : '<p>No subjective recollections documented yet.</p>'}
+          </section>
+        </div></section>`;
+    }
+
     if (app.journalTab === 'history') {
       const items = [...s.log].reverse();
       return `${tabs}<section class="panel"><h2>Activity history</h2>${items.length ? `<ul class="history">${items.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> <strong>${esc(l.title)}</strong>${l.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}${l.notes.length ? `<small>${esc(l.notes.join(' '))}</small>` : ''}${l.changes.length ? `<small>${esc(l.changes.join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>No activity yet. Things you do in the world are recorded here automatically.</p>'}</section>`;
@@ -534,9 +584,26 @@ export function createApp(root, deps) {
       const n = D.NPCS[app.talkNpc];
       const sim = s.npcSim && s.npcSim[app.talkNpc];
       const mems = sim?.memories ? [...sim.memories].reverse().slice(0, 3) : [];
+      const intel = s.npcIntelligence && s.npcIntelligence[app.talkNpc];
+      const pData = intel?.personality || (D.NPC_PERSONALITIES && D.NPC_PERSONALITIES[app.talkNpc]);
+      const personalityCue = pData ? `<div class="sub-head"><p><strong>Personality:</strong> ${esc(pData.traits?.join(', ') || '')}. <em>"${esc(pData.aspirations || '')}"</em></p><p class="hint">Style: ${esc(pData.conversationalStyle || 'conversational')}</p></div>` : '';
+      const initiativeNotice = intel?.initiativePending ? `<div class="report ok" role="status"><p><strong>${esc(intel.initiativePending.title)}</strong>: ${esc(intel.initiativePending.desc)}</p></div>` : '';
+
+      // Contextual conversations
+      const contextualChoices = (D.CONTEXTUAL_CONVERSATIONS || []).filter((ct) => !ct.applicableNpcs || ct.applicableNpcs.includes(app.talkNpc)).map((ct) => {
+        const act = { kind: 'contextual_talk', npc: app.talkNpc, topic: ct.id };
+        const p = R.preview(s, act);
+        return actionCard(`[${ct.category.toUpperCase()}] ${ct.label}`, ct.desc, act, p, 'Discuss');
+      }).join('');
+
       talk = `<section class="panel talk"><div class="report-head"><h2>Talking to ${esc(n.name)}</h2><button class="btn small" data-action="close-talk">Leave conversation</button></div>
-        ${mems.length ? `<div class="sub-head"><p class="hint">Memories with Pithe & world: ${esc(mems.map((m) => m.title).join('; '))}</p></div>` : ''}
+        ${initiativeNotice}
+        ${personalityCue}
+        ${mems.length ? `<div class="sub-head"><p class="hint">Shared Memories: ${esc(mems.map((m) => m.title).join('; '))}</p></div>` : ''}
         ${storyTalkChoices}
+        <div class="sub-head"><h3>Contextual Conversations</h3></div>
+        <ul class="actions">${contextualChoices}</ul>
+        <div class="sub-head"><h3>Traditional Topics</h3></div>
         <ul class="actions">${R.topicsFor(s, app.talkNpc).map((t) => {
           const act = { kind: 'talk', npc: app.talkNpc, topic: t.id };
           const p = R.preview(s, act);
@@ -1153,6 +1220,20 @@ export function createApp(root, deps) {
     }
     else if (a === 'tab') { app.journalTab = el.dataset.tab; render(); }
     else if (a === 'toggle-integration') { app.state.settings.integration = !app.state.settings.integration; render(); persist(); }
+    else if (a === 'toggle-audio') {
+      app.state.audioSettings = app.state.audioSettings || { enabled: false, volume: 0.5, muted: false };
+      app.state.audioSettings.enabled = !app.state.audioSettings.enabled;
+      playChime(440, 0.15, app.state.audioSettings);
+      render();
+      persist();
+    }
+    else if (a === 'toggle-audio-mute') {
+      app.state.audioSettings = app.state.audioSettings || { enabled: false, volume: 0.5, muted: false };
+      app.state.audioSettings.muted = !app.state.audioSettings.muted;
+      if (!app.state.audioSettings.muted) playChime(523.25, 0.15, app.state.audioSettings);
+      render();
+      persist();
+    }
     else if (a === 'export') { const fname = `tap-protocol-save-${R.localDateStr()}.json`; deps.download(fname, deps.exportJson(app.state)); app.exportMsg = `Export started: ${fname}. Your browser saves it to its usual download location. If nothing arrives, check the browser's downloads list or its permission to download files.`; app.reveal = '[data-msg-export]'; render(); }
   }
 
