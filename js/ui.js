@@ -337,7 +337,36 @@ export function createApp(root, deps) {
   }
 
   function journalView(s) {
-    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'stories' ? 'on' : ''}" data-action="tab" data-tab="stories" aria-pressed="${app.journalTab === 'stories'}">Stories</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    if (app.journalTab === 'stories') {
+      const activeStories = (s.stories?.active || []).filter((st) => s.stories?.discovered?.[st.id]);
+      const historyStories = [...(s.stories?.history || [])].reverse();
+
+      const activeHtml = activeStories.length
+        ? activeStories.map((st) => {
+            const tmpl = D.STORY_TEMPLATES[st.templateId];
+            const currentStage = tmpl?.stages.find((stage) => stage.id === st.stageId);
+            const participantsNames = (st.participants || []).map((id) => D.NPCS[id]?.name || id).join(', ');
+            return `<li class="action"><div class="action-main"><strong>${esc(st.title)}</strong> <span class="tag good">${esc(currentStage?.title || st.stageId)}</span>
+              <p>${esc(currentStage?.summary || tmpl?.desc || '')}</p>
+              <p class="meta"><span class="chip">Location: ${esc(D.LOCATIONS[st.location]?.name || st.location)}</span><span class="chip">Involved: ${esc(participantsNames)}</span></p>
+              <small>Stage deadline: ${esc(R.formatClock(st.stageDeadline))}</small></div>
+              <button class="btn" data-action="nav" data-view="world">Follow Story in World</button></li>`;
+          }).join('')
+        : '<p>No discovered active storylines right now. Explore the quarter, converse with residents, or investigate rumors to uncover neighborhood stories.</p>';
+
+      const historyHtml = historyStories.length
+        ? historyStories.map((h) => {
+            const statusLabel = h.playerParticipated ? 'Player Resolved' : 'Autonomous Resolution';
+            return `<li><div class="attr-top"><strong>${esc(h.title)}</strong> <span class="tag">${esc(statusLabel)}</span></div>
+              <small>${esc(R.formatClock(h.resolvedClock))} | Outcome: ${esc((h.outcomeState || '').replace(/_/g, ' '))}</small>
+              <p class="story">${esc(h.summary || '')}</p></li>`;
+          }).join('')
+        : '<p>No concluded storylines in the historical archive yet.</p>';
+
+      return `${tabs}<section class="panel"><h2>Discovered Active Storylines</h2><ul class="actions">${activeHtml}</ul></section>
+        <section class="panel"><h2>Storyline Chronicle & Resolutions</h2><ul class="history">${historyHtml}</ul></section>`;
+    }
     if (app.journalTab === 'history') {
       const items = [...s.log].reverse();
       return `${tabs}<section class="panel"><h2>Activity history</h2>${items.length ? `<ul class="history">${items.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> <strong>${esc(l.title)}</strong>${l.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}${l.notes.length ? `<small>${esc(l.notes.join(' '))}</small>` : ''}${l.changes.length ? `<small>${esc(l.changes.join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>No activity yet. Things you do in the world are recorded here automatically.</p>'}</section>`;
@@ -434,6 +463,27 @@ export function createApp(root, deps) {
         <button class="btn primary" data-action="open-talk" data-npc="${id}">Talk</button></li>`;
     }).join('');
 
+    // Stories relevant to talked-to NPC
+    let storyTalkChoices = '';
+    if (app.talkNpc && R.npcLocation(app.talkNpc, s.clock) === s.location) {
+      const storiesForPerson = (s.stories?.active || []).filter((st) => st.participants?.includes(app.talkNpc));
+      for (const st of storiesForPerson) {
+        // Automatically discover when talking to participant
+        s.stories.discovered[st.id] = true;
+        const tmpl = D.STORY_TEMPLATES[st.templateId];
+        const curStage = tmpl?.stages.find((stage) => stage.id === st.stageId);
+        if (curStage && curStage.choices && !curStage.ambientOnly) {
+          const choiceCards = curStage.choices.map((c) => {
+            const reqCheck = R.checkStoryChoiceRequirements(s, c);
+            const act = { kind: 'story_decision', storyId: st.id, choiceId: c.id };
+            const p = R.preview(s, act);
+            return actionCard(`${st.title}: ${c.label}`, c.desc, act, p.ok ? p : { ok: false, error: reqCheck.error || p.error }, 'Decide');
+          }).join('');
+          storyTalkChoices += `<div class="sub-head"><h3>Storyline: ${esc(st.title)} (${esc(curStage.title)})</h3><p class="hint">${esc(curStage.summary)}</p></div><ul class="actions">${choiceCards}</ul>`;
+        }
+      }
+    }
+
     let talk = '';
     if (app.talkNpc && R.npcLocation(app.talkNpc, s.clock) === s.location) {
       const n = D.NPCS[app.talkNpc];
@@ -441,12 +491,46 @@ export function createApp(root, deps) {
       const mems = sim?.memories ? [...sim.memories].reverse().slice(0, 3) : [];
       talk = `<section class="panel talk"><div class="report-head"><h2>Talking to ${esc(n.name)}</h2><button class="btn small" data-action="close-talk">Leave conversation</button></div>
         ${mems.length ? `<div class="sub-head"><p class="hint">Memories with Pithe & world: ${esc(mems.map((m) => m.title).join('; '))}</p></div>` : ''}
+        ${storyTalkChoices}
         <ul class="actions">${R.topicsFor(s, app.talkNpc).map((t) => {
           const act = { kind: 'talk', npc: app.talkNpc, topic: t.id };
           const p = R.preview(s, act);
           return actionCard(t.label, '', act, p.ok ? p : { ok: false, error: t.disabled || p.error }, 'Say it');
         }).join('')}</ul></section>`;
     }
+
+    // Active emergent stories and events at this location
+    const activeStoriesHere = (s.stories?.active || []).filter((st) => st.location === s.location);
+    const storiesHtml = activeStoriesHere.map((st) => {
+      const tmpl = D.STORY_TEMPLATES[st.templateId];
+      const curStage = tmpl?.stages.find((stage) => stage.id === st.stageId);
+      const isDiscovered = s.stories?.discovered?.[st.id];
+
+      if (!isDiscovered) {
+        // Undiscovered story at location can be discovered
+        return `<li class="action"><div class="action-main"><strong>Neighborhood Opportunity</strong> <span class="tag warn">Discovery</span>
+          <p>You notice unusual activity and conversation regarding local developments.</p>
+          <small>Origin: ${esc(D.LOCATIONS[st.location]?.name || st.location)}</small></div>
+          <button class="btn primary" data-action="do" data-kind="story_discover" data-story-id="${st.id}">Investigate Situation</button></li>`;
+      }
+
+      // Discovered story at location: present choices if not ambient-only
+      if (curStage?.choices && !curStage.ambientOnly) {
+        const choiceItems = curStage.choices.map((c) => {
+          const reqCheck = R.checkStoryChoiceRequirements(s, c);
+          const act = { kind: 'story_decision', storyId: st.id, choiceId: c.id };
+          const p = R.preview(s, act);
+          return actionCard(c.label, c.desc, act, p.ok ? p : { ok: false, error: reqCheck.error || p.error }, 'Decide');
+        }).join('');
+        return `<li class="action"><div class="action-main"><strong>${esc(st.title)}</strong> <span class="tag good">${esc(curStage.title)}</span>
+          <p>${esc(curStage.summary)}</p>
+          <small>Deadline: ${esc(R.formatClock(st.stageDeadline))}</small></div></li><ul class="actions">${choiceItems}</ul>`;
+      }
+
+      return `<li class="action"><div class="action-main"><strong>${esc(st.title)}</strong> <span class="tag">${esc(curStage?.title || 'Developing')}</span>
+        <p>${esc(curStage?.summary || '')}</p>
+        <small>In progress. Deadline: ${esc(R.formatClock(st.stageDeadline))}</small></div></li>`;
+    }).join('');
 
     // Active emergent events at this location
     const activeEvents = (s.worldEvents?.active || []).filter((e) => e.location === s.location);
@@ -467,6 +551,7 @@ export function createApp(root, deps) {
       <div class="stats"><div class="stat"><span>Activity</span><b>${locEnv.activityLevel}/100</b></div><div class="stat"><span>Reputation</span><b>${locEnv.reputation}/100</b></div><div class="stat"><span>Popularity</span><b>${locEnv.popularity}/100</b></div></div>
       ${ev.length ? `<ul class="notes">${ev.map((e) => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}</section>
       ${talk}
+      ${storiesHtml ? `<section class="panel"><h2>Local Developments & Storylines</h2><ul class="actions">${storiesHtml}</ul></section>` : ''}
       ${eventsHtml ? `<section class="panel"><h2>Happening Now at ${esc(loc.name)}</h2><ul class="actions">${eventsHtml}</ul></section>` : ''}
       <section class="panel"><h2>People here</h2>${npcs ? `<ul class="actions">${npcs}</ul>` : '<p>Nobody you know is here right now.</p>'}</section>
       <section class="panel"><h2>Travel</h2><ul class="actions">${go}</ul></section>
@@ -884,7 +969,7 @@ export function createApp(root, deps) {
   function readAction(el) {
     const d = el.dataset;
     const a = { kind: d.kind };
-    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId']) if (d[k] !== undefined) a[k] = d[k];
+    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId', 'storyId', 'choiceId']) if (d[k] !== undefined) a[k] = d[k];
     return a;
   }
 

@@ -1294,5 +1294,800 @@ export const ACHIEVEMENTS = [
   // Emergence & Discovery
   { id: 'social_connector', category: 'Social', name: 'Heart of the Quarter', desc: 'Build Friendly or higher relationships with at least 5 metropolitan residents.', icon: 'people', hidden: false },
   { id: 'independent_founder', category: 'Enterprise', name: 'Self-Made Visionary', desc: 'Found and operate an enterprise generating steady revenue.', icon: 'properties', hidden: false },
-  { id: 'scholar_degree', category: 'Academics', name: 'University Graduate', desc: 'Complete a full Bachelor degree curriculum at Metropolitan University.', icon: 'education', hidden: false }
+  { id: 'scholar_degree', category: 'Academics', name: 'University Graduate', desc: 'Complete a full Bachelor degree curriculum at Metropolitan University.', icon: 'education', hidden: false },
+
+  // Phase 5 Narrative Milestones
+  { id: 'first_story_resolution', category: 'Narrative', name: 'Living Chronicle', desc: 'Directly participate in the resolution of an emergent neighborhood storyline.', icon: 'world', hidden: false },
+  { id: 'storyteller_legend', category: 'Narrative', name: 'Architect of Destinies', desc: 'Resolve three or more multi-stage emergent storylines across the city.', icon: 'world', hidden: false }
 ];
+
+// ==============================================================================
+// PHASE 5 - EMERGENT WORLD & STORYTELLING DATA DEFINITIONS
+// ==============================================================================
+
+export const MAX_ACTIVE_STORIES = 6;
+export const MAX_STORY_HISTORY = 40;
+
+export const STORY_TEMPLATES = {
+  // 1. Cafe Artisanal Expansion vs Landlord Pressure
+  cafe_artisanal_expansion: {
+    id: 'cafe_artisanal_expansion',
+    theme: 'commercial_community',
+    title: 'The Artisanal Roastery Initiative',
+    location: 'cafe',
+    primaryNpc: 'dani',
+    secondaryNpc: 'teo',
+    minClock: 0,
+    cooldownDays: 21,
+    cadenceDays: 14,
+    // Trigger when Dani has positive relation or world memory exists of cafe interaction
+    triggerCondition: (state) => {
+      const rel = state.relations?.dani || 0;
+      return rel >= 10;
+    },
+    rumor: {
+      title: 'Rumors of Corner Cafe expanding with artisanal specialty roasts',
+      context: 'Dani is reportedly scouting regional direct-trade bean suppliers, but negotiations with commercial landlords remain tense.',
+      location: 'cafe'
+    },
+    stages: [
+      {
+        id: 'inciting',
+        title: 'Supplier Disagreement',
+        summary: 'Dani is seeking high-altitude direct-trade beans for a new signature brew, but Teo warns that maritime freight delays could bankrupt the venture.',
+        durationDays: 4,
+        discovery: {
+          location: 'cafe',
+          npc: 'dani',
+          hint: 'Visit Corner Cafe to hear about Dani and Teo\'s supplier debate.'
+        },
+        choices: [
+          {
+            id: 'negotiate_supply',
+            label: 'Mediate a Compromise with Teo',
+            desc: 'Use negotiation skills and market standing to draft a phased delivery guarantee.',
+            requirements: { skills: { negotiation: 2 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              skillExp: { negotiation: 15 },
+              exp: 20,
+              reputation: { community: 4, professional: 3 },
+              relations: { dani: 8, teo: 6 },
+              memory: 'Pithe negotiated a balanced delivery contract between Dani and Teo.',
+              delayed: {
+                delayMinutes: 2880, // 2 days
+                title: 'Roastery Equipment Shipment Arrives',
+                action: 'story_advance',
+                data: { targetStage: 'escalation_success' }
+              }
+            },
+            nextStage: 'waiting_shipment'
+          },
+          {
+            id: 'sponsor_capital',
+            label: 'Invest 80 Money Directly',
+            desc: 'Provide immediate bridge financing to guarantee upfront bulk purchase.',
+            requirements: { money: 80, energy: 10 },
+            consequences: {
+              money: -80,
+              energy: -10,
+              exp: 25,
+              reputation: { community: 8 },
+              relations: { dani: 14 },
+              memory: 'Pithe provided seed capital for the Corner Cafe specialty roastery.',
+              delayed: {
+                delayMinutes: 2880,
+                title: 'Custom Roaster Installed',
+                action: 'story_advance',
+                data: { targetStage: 'escalation_success' }
+              }
+            },
+            nextStage: 'waiting_shipment'
+          },
+          {
+            id: 'counsel_caution',
+            label: 'Advise Against Risky Expansion',
+            desc: 'Point out market volatility and advise Dani to keep current low-overhead operations.',
+            requirements: { skills: { research: 2 }, energy: 15 },
+            consequences: {
+              energy: -15,
+              skillExp: { research: 12 },
+              exp: 15,
+              reputation: { professional: 5 },
+              relations: { teo: 10, dani: -2 },
+              memory: 'Pithe counseled Corner Cafe against over-leveraging on regional imports.',
+              nextStage: 'conservative_resolution'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'Without intervention, Dani and Teo had a heated debate; Teo offered a partial wholesale loan on strict margin terms.',
+          consequences: {
+            relationsMod: { dani: -2 },
+            memory: 'Dani accepted restrictive supplier terms from Teo without independent mediation.'
+          },
+          nextStage: 'escalation_autonomous'
+        }
+      },
+      {
+        id: 'waiting_shipment',
+        title: 'Awaiting Roastery Shipment',
+        summary: 'Logistics are in motion across the Harbor transit docks. Anticipation builds around the cafe.',
+        durationDays: 3,
+        ambientOnly: true
+      },
+      {
+        id: 'escalation_success',
+        title: 'Tasting Night Launch',
+        summary: 'The beans have arrived and roast tests are underway. Dani invites the neighborhood for an inaugural cupping session.',
+        durationDays: 3,
+        discovery: {
+          location: 'cafe',
+          npc: 'dani',
+          hint: 'Dani is hosting a celebratory public tasting session at the Corner Cafe.'
+        },
+        choices: [
+          {
+            id: 'host_tasting',
+            label: 'Help Host & Present the Cupping Session',
+            desc: 'Guide visitors through tasting profiles and handle customer orders.',
+            requirements: { energy: 25 },
+            consequences: {
+              energy: -25,
+              skillExp: { conversation: 15, cooking: 10 },
+              exp: 30,
+              money: 35,
+              reputation: { community: 6, creative: 4 },
+              relations: { dani: 10, teo: 5 },
+              memory: 'The Corner Cafe artisanal launch was a resounding community triumph.',
+              resolved: true,
+              outcomeState: 'triumph'
+            }
+          },
+          {
+            id: 'critique_quietly',
+            label: 'Attend as a Quiet Patron',
+            desc: 'Enjoy the new roast quietly and provide constructive feedback on notes and aroma.',
+            requirements: { energy: 10 },
+            consequences: {
+              energy: -10,
+              satiety: 15,
+              exp: 15,
+              relations: { dani: 5 },
+              memory: 'Pithe attended the successful launch of Corner Cafe\'s artisanal roast.',
+              resolved: true,
+              outcomeState: 'moderate_success'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'The tasting night proceeded smoothly with steady local turnout.',
+          consequences: {
+            memory: 'Corner Cafe successfully introduced its seasonal roast to harbor regulars.'
+          },
+          resolved: true,
+          outcomeState: 'moderate_success'
+        }
+      },
+      {
+        id: 'escalation_autonomous',
+        title: 'Margin Squeeze',
+        summary: 'Tight wholesale terms have strained Dani\'s budget, forcing a compromise on packaging and staffing.',
+        durationDays: 3,
+        discovery: {
+          location: 'cafe',
+          npc: 'dani',
+          hint: 'Dani looks exhausted behind the cafe counter.'
+        },
+        choices: [
+          {
+            id: 'volunteer_shift',
+            label: 'Volunteer an Evening Shift',
+            desc: 'Step behind the counter for free to alleviate rush hour pressure.',
+            requirements: { energy: 30 },
+            consequences: {
+              energy: -30,
+              skillExp: { conversation: 12 },
+              exp: 20,
+              relations: { dani: 12 },
+              reputation: { community: 5 },
+              memory: 'Pithe helped Dani weather a difficult launch evening at Corner Cafe.',
+              resolved: true,
+              outcomeState: 'hard_won_success'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'Dani scaled back the coffee menu to survive the wholesale costs without external help.',
+          consequences: {
+            memory: 'Corner Cafe absorbed supplier costs through longer hours and leaner operations.'
+          },
+          resolved: true,
+          outcomeState: 'strained_resolution'
+        }
+      },
+      {
+        id: 'conservative_resolution',
+        title: 'Prudent Realignment',
+        summary: 'Dani decided to focus on home-baked treats and existing menu improvements rather than risky roasting gear.',
+        durationDays: 1,
+        resolved: true,
+        outcomeState: 'stable_caution'
+      }
+    ]
+  },
+
+  // 2. Open-Source Academic IP & Ethics Dilemma
+  academic_open_source_dilemma: {
+    id: 'academic_open_source_dilemma',
+    theme: 'technology_ethics',
+    title: 'The Algorithmic Commons',
+    location: 'tech_park',
+    primaryNpc: 'chloe',
+    secondaryNpc: 'marcus',
+    minClock: 0,
+    cooldownDays: 28,
+    cadenceDays: 18,
+    triggerCondition: (state) => {
+      const prog = state.character.skills?.programming?.level || 0;
+      const res = state.character.skills?.research?.level || 0;
+      return prog >= 2 || res >= 2;
+    },
+    rumor: {
+      title: 'Debate heating up over Tech Park algorithmic library license',
+      context: 'Chloe and corporate sponsors are clashing over whether a breakthrough data pipeline should remain open-source or proprietary.',
+      location: 'tech_park'
+    },
+    stages: [
+      {
+        id: 'inciting',
+        title: 'License Dispute',
+        summary: 'Chloe built an efficient decentralized data library, but Marcus Vance wants Apex Corporation to acquire an exclusive commercial license.',
+        durationDays: 5,
+        discovery: {
+          location: 'tech_park',
+          npc: 'chloe',
+          hint: 'Chloe is reviewing code licensing documents in the Tech Park atrium.'
+        },
+        choices: [
+          {
+            id: 'defend_open_source',
+            label: 'Help Chloe Draft Permissive Dual-License',
+            desc: 'Contribute technical documentation establishing open public access with commercial enterprise clauses.',
+            requirements: { skills: { programming: 2 }, energy: 25 },
+            consequences: {
+              energy: -25,
+              skillExp: { programming: 20, writing: 10 },
+              exp: 25,
+              reputation: { academic: 6, creative: 5, professional: -2 },
+              relations: { chloe: 12, marcus: -4 },
+              memory: 'Pithe defended open-source commons alongside Chloe at Tech Park.',
+              delayed: {
+                delayMinutes: 4320, // 3 days
+                title: 'Global Developer Community Adopts Framework',
+                action: 'story_advance',
+                data: { targetStage: 'open_triumph' }
+              }
+            },
+            nextStage: 'waiting_adoption'
+          },
+          {
+            id: 'broker_commercial_deal',
+            label: 'Advise Chloe to Accept Marcus\'s Buyout',
+            desc: 'Argue that capital injection and corporate resources will yield greater long-term impact and personal wealth.',
+            requirements: { skills: { negotiation: 2 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              skillExp: { negotiation: 18 },
+              exp: 25,
+              reputation: { professional: 8, academic: -3 },
+              relations: { marcus: 12, chloe: -2 },
+              memory: 'Pithe facilitated a lucrative enterprise acquisition for Chloe\'s software pipeline.',
+              delayed: {
+                delayMinutes: 4320,
+                title: 'Apex Commercial Launch',
+                action: 'story_advance',
+                data: { targetStage: 'corporate_launch' }
+              }
+            },
+            nextStage: 'waiting_adoption'
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'Without Pithe\'s input, Chloe chose a standard MIT license, while Marcus quietly redirected capital to internal engineering.',
+          consequences: {
+            memory: 'Chloe released the code library under a permissive license independently.'
+          },
+          nextStage: 'open_triumph'
+        }
+      },
+      {
+        id: 'waiting_adoption',
+        title: 'Ecosystem Deliberation',
+        summary: 'Tech forums and corporate legal teams are reviewing the repository documentation.',
+        durationDays: 3,
+        ambientOnly: true
+      },
+      {
+        id: 'open_triumph',
+        title: 'Global Community Recognition',
+        summary: 'The project reached thousands of GitHub stars. Chloe invites contributors to celebrate at the Tech Park cafeteria.',
+        durationDays: 3,
+        discovery: {
+          location: 'tech_park',
+          npc: 'chloe',
+          hint: 'Tech Park developers are celebrating an open-source milestone.'
+        },
+        choices: [
+          {
+            id: 'give_keynote',
+            label: 'Deliver a Lightning Architecture Talk',
+            desc: 'Share architectural principles of sustainable open software with the assembled developers.',
+            requirements: { skills: { communication: 4 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              exp: 35,
+              skillExp: { programming: 15, conversation: 15 },
+              reputation: { academic: 8, creative: 6 },
+              relations: { chloe: 8 },
+              memory: 'Pithe delivered a celebrated technical talk on open architectural stewardship.',
+              resolved: true,
+              outcomeState: 'open_triumph'
+            }
+          },
+          {
+            id: 'mingle_developers',
+            label: 'Mingle and Exchange Contacts',
+            desc: 'Network with local software engineers and data scientists.',
+            requirements: { energy: 10 },
+            consequences: {
+              energy: -10,
+              exp: 20,
+              reputation: { professional: 4, community: 4 },
+              relations: { chloe: 4 },
+              memory: 'Pithe networked with software engineers celebrating Chloe\'s project release.',
+              resolved: true,
+              outcomeState: 'open_triumph'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'The release concluded peacefully with solid adoption among university students and engineers.',
+          consequences: {
+            memory: 'The open-source library established itself as a reliable community standard.'
+          },
+          resolved: true,
+          outcomeState: 'open_triumph'
+        }
+      },
+      {
+        id: 'corporate_launch',
+        title: 'Commercial Suite Release',
+        summary: 'Apex Corporation unveiled the enterprise solution with executive fanfare in Downtown.',
+        durationDays: 3,
+        discovery: {
+          location: 'downtown',
+          npc: 'marcus',
+          hint: 'Marcus Vance is hosting a corporate briefing downtown.'
+        },
+        choices: [
+          {
+            id: 'attend_press_conference',
+            label: 'Attend Corporate Executive Briefing',
+            desc: 'Stand alongside Marcus as an advisor during the corporate press demonstration.',
+            requirements: { energy: 20 },
+            consequences: {
+              energy: -20,
+              money: 100, // Consulting honorarium
+              exp: 30,
+              reputation: { professional: 10, community: -2 },
+              relations: { marcus: 10 },
+              memory: 'Pithe stood as executive technology advisor for Apex Corporation\'s software rollout.',
+              resolved: true,
+              outcomeState: 'corporate_triumph'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'The corporate launch met commercial targets with notable enterprise sales.',
+          consequences: {
+            memory: 'Apex Corporation integrated Chloe\'s architecture into their proprietary stack.'
+          },
+          resolved: true,
+          outcomeState: 'corporate_triumph'
+        }
+      }
+    ]
+  },
+
+  // 3. Lantern Market Historical Preservation vs Urban Modernization
+  market_preservation_initiative: {
+    id: 'market_preservation_initiative',
+    theme: 'community_heritage',
+    title: 'The Lantern Quarter Legacy',
+    location: 'market',
+    primaryNpc: 'teo',
+    secondaryNpc: 'julian',
+    minClock: 0,
+    cooldownDays: 28,
+    cadenceDays: 21,
+    triggerCondition: (state) => {
+      const relTeo = state.relations?.teo || 0;
+      return relTeo >= 8;
+    },
+    rumor: {
+      title: 'Planning council debating modern glass canopy over historic Lantern Market',
+      context: 'Stallholders fear gentrification and eviction, while city planners cite storm-proofing and increased tourism.',
+      location: 'market'
+    },
+    stages: [
+      {
+        id: 'inciting',
+        title: 'Notice of Redevelopment',
+        summary: 'A municipal notice proposes replacing the traditional wooden rafters and paper lantern arrays with a prefabricated glass pavilion. Teo is rallying stallholders.',
+        durationDays: 5,
+        discovery: {
+          location: 'market',
+          npc: 'teo',
+          hint: 'Teo is distributing petition leaflets near his spice stall.'
+        },
+        choices: [
+          {
+            id: 'sign_and_organize',
+            label: 'Author an Architectural Preservation Brief',
+            desc: 'Catalog the historical joinery and communal significance of the market rafters to submit to the civic board.',
+            requirements: { skills: { writing: 2, research: 2 }, energy: 25 },
+            consequences: {
+              energy: -25,
+              skillExp: { writing: 18, research: 15 },
+              exp: 25,
+              reputation: { community: 10, creative: 5 },
+              relations: { teo: 14, mira: 6 },
+              memory: 'Pithe authored a heritage defense brief protecting Lantern Market\'s historic architecture.',
+              delayed: {
+                delayMinutes: 4320,
+                title: 'Municipal Hearing Convenes',
+                action: 'story_advance',
+                data: { targetStage: 'civic_hearing' }
+              }
+            },
+            nextStage: 'waiting_hearing'
+          },
+          {
+            id: 'advocate_modern_hybrid',
+            label: 'Propose a Hybrid Artisan Pavilion',
+            desc: 'Liaise with urban designers like Julian to preserve the timber core while integrating rain water collection and solar lanterns.',
+            requirements: { skills: { design: 2 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              skillExp: { design: 18, negotiation: 12 },
+              exp: 25,
+              reputation: { professional: 6, community: 6 },
+              relations: { julian: 10, teo: 6 },
+              memory: 'Pithe proposed an award-winning ecological modernization compromise for Lantern Market.',
+              delayed: {
+                delayMinutes: 4320,
+                title: 'Municipal Hearing Convenes',
+                action: 'story_advance',
+                data: { targetStage: 'civic_hearing' }
+              }
+            },
+            nextStage: 'waiting_hearing'
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'Stallholders organized an impromptu demonstration; council delayed the vote to next quarter.',
+          consequences: {
+            memory: 'Market vendors rallied independently to hold off structural demolition.'
+          },
+          nextStage: 'civic_hearing'
+        }
+      },
+      {
+        id: 'waiting_hearing',
+        title: 'Civic Deliberation',
+        summary: 'The city planning committee is reviewing community testimonials.',
+        durationDays: 3,
+        ambientOnly: true
+      },
+      {
+        id: 'civic_hearing',
+        title: 'City Council Public Forum',
+        summary: 'The municipal auditorium opens for final remarks before the district zoning vote.',
+        durationDays: 3,
+        discovery: {
+          location: 'university',
+          npc: 'elena',
+          hint: 'The public urban planning hearing is underway at University Hall.'
+        },
+        choices: [
+          {
+            id: 'speak_at_podium',
+            label: 'Deliver Final Testimonial at the Podium',
+            desc: 'Deliver a moving impassioned speech on the cultural lifeblood of neighborhood markets.',
+            requirements: { skills: { conversation: 2 }, energy: 25 },
+            consequences: {
+              energy: -25,
+              skillExp: { conversation: 20 },
+              exp: 35,
+              reputation: { community: 12, academic: 5 },
+              relations: { teo: 12, elena: 6 },
+              memory: 'Pithe swayed the municipal council to confer protected heritage landmark status on Lantern Market.',
+              resolved: true,
+              outcomeState: 'landmark_protection'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'The council approved a compromise protective easement without further testimony.',
+          consequences: {
+            memory: 'Lantern Market secured standard municipal heritage safeguards.'
+          },
+          resolved: true,
+          outcomeState: 'standard_protection'
+        }
+      }
+    ]
+  },
+
+  // 4. University Academic Debate & Scholarly Rivalry
+  academic_symposium_rivalry: {
+    id: 'academic_symposium_rivalry',
+    theme: 'academic_intellectual',
+    title: 'The Epistemic Symposium',
+    location: 'university',
+    primaryNpc: 'elena',
+    secondaryNpc: 'mira',
+    minClock: 0,
+    cooldownDays: 28,
+    cadenceDays: 21,
+    triggerCondition: (state) => {
+      const res = state.character.skills?.research?.level || 0;
+      return res >= 2 || (state.relations?.elena || 0) >= 10;
+    },
+    rumor: {
+      title: 'Controversy erupts over economic history symposium thesis',
+      context: 'Dr. Rostova and visiting scholars disagree on quantitative modeling of labor transitions.',
+      location: 'university'
+    },
+    stages: [
+      {
+        id: 'inciting',
+        title: 'Scholarly Impasse',
+        summary: 'Dr. Elena Rostova is preparing a keynote thesis defending humanistic socio-economic metrics against purely algorithmic financial forecasting.',
+        durationDays: 4,
+        discovery: {
+          location: 'university',
+          npc: 'elena',
+          hint: 'Dr. Rostova is cross-referencing archival manuscripts at the University Archive.'
+        },
+        choices: [
+          {
+            id: 'conduct_data_synthesis',
+            label: 'Compile Longitudinal Historical Data',
+            desc: 'Spend hours synthesizing harbor trade archives into an empirical rebuttal supporting Elena\'s thesis.',
+            requirements: { skills: { research: 2, writing: 2 }, energy: 30 },
+            consequences: {
+              energy: -30,
+              skillExp: { research: 25, writing: 15 },
+              exp: 30,
+              reputation: { academic: 12 },
+              relations: { elena: 15, mira: 6 },
+              memory: 'Pithe co-authored the empirical defense for Dr. Rostova\'s keynote thesis.',
+              delayed: {
+                delayMinutes: 2880,
+                title: 'Symposium Keynote Session',
+                action: 'story_advance',
+                data: { targetStage: 'symposium_defense' }
+              }
+            },
+            nextStage: 'waiting_symposium'
+          },
+          {
+            id: 'critique_assumptions',
+            label: 'Rigorously Critique the Epistemology',
+            desc: 'Challenge Elena\'s premises to eliminate vulnerabilities before peer reviewers attack them.',
+            requirements: { skills: { research: 3 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              skillExp: { research: 22 },
+              exp: 25,
+              reputation: { academic: 8 },
+              relations: { elena: 10 },
+              memory: 'Pithe served as rigorous internal devil\'s advocate for Dr. Rostova.',
+              delayed: {
+                delayMinutes: 2880,
+                title: 'Symposium Keynote Session',
+                action: 'story_advance',
+                data: { targetStage: 'symposium_defense' }
+              }
+            },
+            nextStage: 'waiting_symposium'
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'Dr. Rostova finalized her lecture outline independently late into the night.',
+          consequences: {
+            memory: 'Dr. Rostova finalized her symposium keynote through solitary research.'
+          },
+          nextStage: 'symposium_defense'
+        }
+      },
+      {
+        id: 'waiting_symposium',
+        title: 'Preparation & Peer Review',
+        summary: 'Faculty members are reviewing draft preprints throughout the lecture halls.',
+        durationDays: 2,
+        ambientOnly: true
+      },
+      {
+        id: 'symposium_defense',
+        title: 'The Keynote Lecture',
+        summary: 'Elena presents her findings before a full auditorium of economists, academics, and civic leaders.',
+        durationDays: 3,
+        discovery: {
+          location: 'university',
+          npc: 'elena',
+          hint: 'The keynote symposium lecture is underway in the grand amphitheater.'
+        },
+        choices: [
+          {
+            id: 'field_qa_inquiries',
+            label: 'Field Inquiries from the Floor',
+            desc: 'Step up to the microphone during open discussion to clarify key empirical findings.',
+            requirements: { skills: { conversation: 2 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              exp: 30,
+              skillExp: { conversation: 15, research: 10 },
+              reputation: { academic: 10, community: 5 },
+              relations: { elena: 8 },
+              memory: 'Pithe defended the symposium paper during intense academic Q&A.',
+              resolved: true,
+              outcomeState: 'academic_acclaim'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'The lecture concluded with respectful applause and healthy scholarly discourse.',
+          consequences: {
+            memory: 'The University symposium concluded successfully.'
+          },
+          resolved: true,
+          outcomeState: 'academic_acclaim'
+        }
+      }
+    ]
+  },
+
+  // 5. Marina Coastal Environmental Initiative & Yacht Club Friction
+  marina_coastal_cleanup_initiative: {
+    id: 'marina_coastal_cleanup_initiative',
+    theme: 'community_ecology',
+    title: 'Tides of the Marina',
+    location: 'marina',
+    primaryNpc: 'julian',
+    secondaryNpc: 'marcus',
+    minClock: 0,
+    cooldownDays: 28,
+    cadenceDays: 21,
+    triggerCondition: (state) => {
+      const relJulian = state.relations?.julian || 0;
+      const fit = state.character.skills?.fitness?.level || 0;
+      return relJulian >= 6 || fit >= 2;
+    },
+    rumor: {
+      title: 'Marina basin clean-up effort clashing with private regatta slipway schedules',
+      context: 'Environmental volunteers are demanding slipway closures to dredge plastics, frustrating luxury yacht owners.',
+      location: 'marina'
+    },
+    stages: [
+      {
+        id: 'inciting',
+        title: 'The Debris Accord',
+        summary: 'Winter tides have accumulated microplastics along the harbor breakwater. Julian wants to coordinate a neighborhood shoreline restoration, but private berth owners object to heavy equipment access.',
+        durationDays: 5,
+        discovery: {
+          location: 'marina',
+          npc: 'julian',
+          hint: 'Julian is inspecting tide lines along the Marina boardwalk.'
+        },
+        choices: [
+          {
+            id: 'organize_volunteer_drive',
+            label: 'Mobilize Civic Volunteers for Low-Impact Dredging',
+            desc: 'Rally local residents to clear the shoreline by hand and kayak without blocking private slips.',
+            requirements: { skills: { conversation: 2, fitness: 1 }, energy: 30 },
+            consequences: {
+              energy: -30,
+              skillExp: { fitness: 20, conversation: 15 },
+              exp: 30,
+              reputation: { community: 10, athletic: 6 },
+              relations: { julian: 14, marcus: 4 },
+              memory: 'Pithe led a successful low-impact citizen cleanup along the Marina shoreline.',
+              delayed: {
+                delayMinutes: 2880,
+                title: 'Clear Waters & Shoreline Celebration',
+                action: 'story_advance',
+                data: { targetStage: 'marina_triumph' }
+              }
+            },
+            nextStage: 'waiting_cleanup'
+          },
+          {
+            id: 'negotiate_berth_access',
+            label: 'Negotiate Corporate Sponsorship from Marcus',
+            desc: 'Convince Marcus Vance to fund biodegradable booms and position it as corporate ESG stewardship.',
+            requirements: { skills: { negotiation: 2 }, energy: 20 },
+            consequences: {
+              energy: -20,
+              skillExp: { negotiation: 20 },
+              exp: 25,
+              reputation: { professional: 8, community: 6 },
+              relations: { marcus: 10, julian: 8 },
+              memory: 'Pithe secured corporate green sponsorship for the Marina basin restoration.',
+              delayed: {
+                delayMinutes: 2880,
+                title: 'Clear Waters & Shoreline Celebration',
+                action: 'story_advance',
+                data: { targetStage: 'marina_triumph' }
+              }
+            },
+            nextStage: 'waiting_cleanup'
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'Julian and marina staff cleared accessible sections at low tide with modest success.',
+          consequences: {
+            memory: 'Marina boardwalk shoreline was partially cleared by municipal maintenance.'
+          },
+          nextStage: 'marina_triumph'
+        }
+      },
+      {
+        id: 'waiting_cleanup',
+        title: 'Restoration Operations',
+        summary: 'Silt nets and sorting bins are active across the bayside pier.',
+        durationDays: 2,
+        ambientOnly: true
+      },
+      {
+        id: 'marina_triumph',
+        title: 'Boardwalk Shoreline Regatta',
+        summary: 'With clean waters and pristine banks, the bayside boardwalk hosts an open-air celebration.',
+        durationDays: 3,
+        discovery: {
+          location: 'marina',
+          npc: 'julian',
+          hint: 'The bayside boardwalk is bustling with celebrations and clean water displays.'
+        },
+        choices: [
+          {
+            id: 'run_coastal_fun_run',
+            label: 'Lead the Sunset Boardwalk 5K Run',
+            desc: 'Join Julian and waterfront athletes in a celebratory shoreline run.',
+            requirements: { skills: { fitness: 2 }, energy: 25 },
+            consequences: {
+              energy: -25,
+              skillExp: { fitness: 25 },
+              exp: 30,
+              reputation: { athletic: 10, community: 6 },
+              relations: { julian: 8 },
+              memory: 'Pithe led the celebratory sunset boardwalk shoreline run.',
+              resolved: true,
+              outcomeState: 'clean_water_triumph'
+            }
+          }
+        ],
+        autonomousOutcome: {
+          summary: 'The community gathered along the pier as dusk fell over the sparkling harbor.',
+          consequences: {
+            memory: 'The marina restoration celebration concluded happily.'
+          },
+          resolved: true,
+          outcomeState: 'clean_water_triumph'
+        }
+      }
+    ]
+  }
+};

@@ -137,6 +137,7 @@ export function createCharacter(o = {}) {
   ensureChronicle(state);
   ensureWorldMemory(state);
   ensurePhase4(state);
+  ensurePhase5(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -175,6 +176,7 @@ export function migrateState(s) {
   ensureChronicle(s);
   ensureWorldMemory(s);
   ensurePhase4(s);
+  ensurePhase5(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -796,6 +798,7 @@ export function processWorldSimulation(state) {
   processLocationDevelopment(state);
   processEmergentWorldEvents(state);
   processCausalTriggers(state);
+  processEmergentStories(state);
 }
 
 export function processLocationDevelopment(state) {
@@ -914,6 +917,8 @@ export function processCausalTriggers(state) {
       }
     } else if (trig.action === 'rumor') {
       createRumor(state, trig.data);
+    } else if (trig.action === 'story_advance') {
+      advanceStoryToStage(state, trig.data?.storyId, trig.data?.targetStage, trig.title);
     }
   }
 }
@@ -1210,6 +1215,493 @@ function doJobApply(state, jobId) {
       `You are officially hired as ${job.title}! Weekly salary: ${job.salary} money.`
     ]
   };
+}
+
+// ==============================================================================
+// PHASE 5 - EMERGENT WORLD & STORYTELLING ENGINE
+// ==============================================================================
+
+export function ensurePhase5(state) {
+  if (!state.stories) {
+    state.stories = {
+      active: [],     // Array of active story instances
+      history: [],    // Array of resolved/expired story summaries
+      discovered: {}  // storyId: true/false whether player learned of it
+    };
+  }
+  if (!Array.isArray(state.stories.active)) state.stories.active = [];
+  if (!Array.isArray(state.stories.history)) state.stories.history = [];
+  if (!state.stories.discovered) state.stories.discovered = {};
+}
+
+export function processEmergentStories(state) {
+  ensurePhase5(state);
+  ensureWorldMemory(state);
+
+  const curClock = state.clock;
+  const remainingActive = [];
+
+  for (const story of state.stories.active) {
+    const tmpl = D.STORY_TEMPLATES[story.templateId];
+    if (!tmpl) continue;
+
+    const currentStageDef = tmpl.stages.find((s) => s.id === story.stageId);
+    if (!currentStageDef) {
+      story.resolved = true;
+      story.outcomeState = 'expired_unresolved';
+      state.stories.history.push({
+        id: story.id,
+        templateId: story.templateId,
+        title: tmpl.title,
+        resolvedClock: curClock,
+        playerParticipated: story.playerParticipated,
+        outcomeState: story.outcomeState,
+        summary: 'Story elapsed without external intervention.'
+      });
+      continue;
+    }
+
+    // Check if stage deadline passed
+    if (curClock >= story.stageDeadline) {
+      if (currentStageDef.resolved) {
+        // Story concludes naturally
+        story.resolved = true;
+        story.outcomeState = story.outcomeState || currentStageDef.outcomeState || 'concluded';
+        state.stories.history.push({
+          id: story.id,
+          templateId: story.templateId,
+          title: tmpl.title,
+          resolvedClock: curClock,
+          playerParticipated: story.playerParticipated,
+          outcomeState: story.outcomeState,
+          summary: story.resolutionSummary || currentStageDef.summary
+        });
+        if (state.stories.history.length > (D.MAX_STORY_HISTORY || 40)) {
+          state.stories.history.shift();
+        }
+        continue;
+      }
+
+      // Autonomous NPC progression if not resolved by player
+      const auto = currentStageDef.autonomousOutcome;
+      if (auto) {
+        story.autonomousProgressions = (story.autonomousProgressions || 0) + 1;
+        if (auto.consequences) {
+          if (auto.consequences.relationsMod) {
+            for (const [npc, amt] of Object.entries(auto.consequences.relationsMod)) {
+              addRel(state, npc, amt);
+            }
+          }
+          if (auto.consequences.memory) {
+            recordMemory(state, {
+              type: 'story_autonomous',
+              title: `${tmpl.title}: autonomous progression`,
+              entities: [tmpl.primaryNpc, ...(tmpl.secondaryNpc ? [tmpl.secondaryNpc] : [])],
+              location: tmpl.location,
+              importance: D.MEMORY_IMPORTANCE.NOTABLE,
+              context: auto.consequences.memory
+            });
+          }
+        }
+
+        if (auto.resolved) {
+          story.resolved = true;
+          story.outcomeState = auto.outcomeState || 'autonomous_resolution';
+          story.resolutionSummary = auto.summary;
+          state.stories.history.push({
+            id: story.id,
+            templateId: story.templateId,
+            title: tmpl.title,
+            resolvedClock: curClock,
+            playerParticipated: story.playerParticipated,
+            outcomeState: story.outcomeState,
+            summary: auto.summary
+          });
+          if (state.stories.history.length > (D.MAX_STORY_HISTORY || 40)) {
+            state.stories.history.shift();
+          }
+          continue;
+        } else if (auto.nextStage) {
+          const nextDef = tmpl.stages.find((s) => s.id === auto.nextStage);
+          if (nextDef) {
+            story.stageId = auto.nextStage;
+            story.stageEnteredClock = curClock;
+            story.stageDeadline = curClock + (nextDef.durationDays || 3) * 1440;
+            story.log.push({
+              clock: curClock,
+              event: `Progressed autonomously to: ${nextDef.title}`,
+              desc: auto.summary
+            });
+            remainingActive.push(story);
+            continue;
+          }
+        }
+      }
+
+      // If no next stage or autonomous definition, mark as concluded
+      story.resolved = true;
+      story.outcomeState = 'expired_unresolved';
+      state.stories.history.push({
+        id: story.id,
+        templateId: story.templateId,
+        title: tmpl.title,
+        resolvedClock: curClock,
+        playerParticipated: story.playerParticipated,
+        outcomeState: story.outcomeState,
+        summary: `Story elapsed without external intervention.`
+      });
+      continue;
+    }
+
+    remainingActive.push(story);
+  }
+
+  state.stories.active = remainingActive;
+
+  // Potential spawn of new emergent stories
+  if (state.stories.active.length < (D.MAX_ACTIVE_STORIES || 6)) {
+    for (const [templateId, tmpl] of Object.entries(D.STORY_TEMPLATES)) {
+      // Prevent duplicate active story of same template
+      if (state.stories.active.some((s) => s.templateId === templateId)) continue;
+
+      // Check cooldown from last resolution
+      const last = [...state.stories.history].reverse().find((h) => h.templateId === templateId);
+      const cooldownMinutes = (tmpl.cooldownDays || 21) * 1440;
+      if (last && (curClock - last.resolvedClock) < cooldownMinutes) continue;
+
+      // Check template trigger condition
+      if (typeof tmpl.triggerCondition === 'function') {
+        if (!tmpl.triggerCondition(state)) continue;
+      }
+
+      // Spawn story
+      const initialStage = tmpl.stages[0];
+      const storyId = `story_${nextId(state)}`;
+      const newStory = {
+        id: storyId,
+        templateId,
+        title: tmpl.title,
+        theme: tmpl.theme,
+        location: tmpl.location,
+        participants: [tmpl.primaryNpc, ...(tmpl.secondaryNpc ? [tmpl.secondaryNpc] : [])],
+        stageId: initialStage.id,
+        stageEnteredClock: curClock,
+        stageDeadline: curClock + (initialStage.durationDays || 3) * 1440,
+        playerParticipated: false,
+        resolved: false,
+        outcomeState: null,
+        decisions: [],
+        log: [
+          {
+            clock: curClock,
+            event: `Story emerged: ${initialStage.title}`,
+            desc: initialStage.summary
+          }
+        ]
+      };
+
+      state.stories.active.push(newStory);
+
+      // Record inciting world memory
+      recordMemory(state, {
+        type: 'story_inciting',
+        title: `${tmpl.title}: ${initialStage.title}`,
+        entities: newStory.participants,
+        location: tmpl.location,
+        importance: D.MEMORY_IMPORTANCE.NOTABLE,
+        visibility: 'neighborhood',
+        context: initialStage.summary
+      });
+
+      // Spread rumor if defined
+      if (tmpl.rumor) {
+        createRumor(state, {
+          title: tmpl.rumor.title,
+          context: tmpl.rumor.context,
+          location: tmpl.rumor.location || tmpl.location,
+          entities: newStory.participants,
+          importance: D.MEMORY_IMPORTANCE.FLEETING
+        });
+      }
+
+      // Check if player reaches max active
+      if (state.stories.active.length >= (D.MAX_ACTIVE_STORIES || 6)) break;
+    }
+  }
+}
+
+export function advanceStoryToStage(state, storyId, targetStageId, note = '') {
+  ensurePhase5(state);
+  const story = state.stories.active.find((s) => s.id === storyId);
+  if (!story) return;
+
+  const tmpl = D.STORY_TEMPLATES[story.templateId];
+  if (!tmpl) return;
+
+  const targetStage = tmpl.stages.find((s) => s.id === targetStageId);
+  if (!targetStage) return;
+
+  story.stageId = targetStageId;
+  story.stageEnteredClock = state.clock;
+  story.stageDeadline = state.clock + (targetStage.durationDays || 3) * 1440;
+  story.log.push({
+    clock: state.clock,
+    event: `Story progressed to: ${targetStage.title}`,
+    desc: note || targetStage.summary
+  });
+
+  if (targetStage.resolved) {
+    story.resolved = true;
+    story.outcomeState = targetStage.outcomeState || 'concluded';
+  }
+}
+
+export function doStoryDiscover(state, storyId) {
+  ensurePhase5(state);
+  const story = state.stories.active.find((s) => s.id === storyId);
+  if (!story) return { error: 'Story not found or already concluded.' };
+  state.stories.discovered[storyId] = true;
+  return {
+    title: `Discovered: ${story.title}`,
+    narrative: [`You learned about developments unfolding regarding "${story.title}".`]
+  };
+}
+
+export function checkStoryChoiceRequirements(state, choice) {
+  if (!choice.requirements) return { ok: true };
+  const req = choice.requirements;
+
+  if (req.money && state.money < req.money) {
+    return { ok: false, error: `Requires ${req.money} money (you have ${state.money}).` };
+  }
+  if (req.energy && state.needs.energy < req.energy) {
+    return { ok: false, error: `Requires at least ${req.energy} energy.` };
+  }
+  if (req.skills) {
+    for (const [sk, lvl] of Object.entries(req.skills)) {
+      if ((state.character.skills[sk]?.level || 0) < lvl) {
+        const skName = D.SKILLS.find((s) => s.id === sk)?.name || sk;
+        return { ok: false, error: `Requires ${skName} Level ${lvl} or higher.` };
+      }
+    }
+  }
+  if (req.attributes) {
+    for (const [att, val] of Object.entries(req.attributes)) {
+      if ((state.character.attributes[att] || 0) < val) {
+        const aName = D.ATTRIBUTES.find((a) => a.id === att)?.name || att;
+        return { ok: false, error: `Requires ${aName} ${val} or higher.` };
+      }
+    }
+  }
+  if (req.reputation) {
+    for (const [dom, minVal] of Object.entries(req.reputation)) {
+      if ((state.reputation[dom] || 0) < minVal) {
+        const domName = D.REPUTATION_DOMAINS[dom]?.name || dom;
+        return { ok: false, error: `Requires at least ${minVal} ${domName} reputation.` };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+export function doStoryDecision(state, storyId, choiceId) {
+  ensurePhase5(state);
+  ensurePhase4(state);
+  ensureWorldMemory(state);
+
+  const story = state.stories.active.find((s) => s.id === storyId);
+  if (!story) return { error: 'Story storyline not found or has concluded.' };
+
+  const tmpl = D.STORY_TEMPLATES[story.templateId];
+  if (!tmpl) return { error: 'Story template data missing.' };
+
+  const currentStage = tmpl.stages.find((s) => s.id === story.stageId);
+  if (!currentStage) return { error: 'Current story stage not found.' };
+
+  const choice = (currentStage.choices || []).find((c) => c.id === choiceId);
+  if (!choice) return { error: 'Invalid story decision choice.' };
+
+  // Context check: Must be at story location or in conversation with an involved NPC
+  const atLocation = state.location === tmpl.location || (currentStage.discovery?.location && state.location === currentStage.discovery.location);
+  if (!atLocation) {
+    const locName = D.LOCATIONS[tmpl.location]?.name || tmpl.location;
+    return { error: `Must be at ${locName} to participate in this decision.` };
+  }
+
+  // Requirements check
+  const reqCheck = checkStoryChoiceRequirements(state, choice);
+  if (!reqCheck.ok) return { error: reqCheck.error };
+
+  const csq = choice.consequences || {};
+
+  // Deduct resources
+  if (csq.money) {
+    transact(state, { amount: csq.money, category: 'story', desc: `${story.title}: ${choice.label}` });
+  }
+  if (csq.energy) {
+    state.needs.energy = clamp(state.needs.energy + csq.energy, 0, 100);
+  }
+  if (csq.satiety) {
+    state.needs.satiety = clamp(state.needs.satiety + csq.satiety, 0, 100);
+  }
+
+  // Grant rewards
+  if (csq.exp) grantExp(state, csq.exp);
+  if (csq.skillExp) {
+    for (const [sk, exp] of Object.entries(csq.skillExp)) {
+      grantSkillExp(state, sk, exp);
+    }
+  }
+  if (csq.reputation) {
+    for (const [dom, amt] of Object.entries(csq.reputation)) {
+      adjustReputation(state, dom, amt, `${tmpl.title}`);
+    }
+  }
+  if (csq.relations) {
+    for (const [npc, amt] of Object.entries(csq.relations)) {
+      addRel(state, npc, amt);
+      recordNpcMemory(state, npc, {
+        sourceEntity: 'pithe',
+        title: `Story choice: ${choice.label}`,
+        context: `${csq.memory || choice.desc}`,
+        importance: D.MEMORY_IMPORTANCE.SIGNIFICANT,
+        clock: state.clock
+      });
+    }
+  }
+
+  // Record player involvement
+  story.playerParticipated = true;
+  state.stories.discovered[storyId] = true;
+  story.decisions.push({
+    clock: state.clock,
+    stageId: currentStage.id,
+    choiceId: choice.id,
+    label: choice.label,
+    desc: choice.desc
+  });
+
+  // Advance time
+  advance(state, choice.minutes || 45);
+
+  // Record memory
+  if (csq.memory) {
+    recordMemory(state, {
+      type: 'story_decision',
+      title: `${tmpl.title}: ${choice.label}`,
+      entities: ['pithe', ...story.participants],
+      location: tmpl.location,
+      importance: D.MEMORY_IMPORTANCE.MAJOR,
+      visibility: 'public',
+      context: csq.memory
+    });
+  }
+
+  // Chronicle recording
+  recordChronicle(state, {
+    category: 'community',
+    title: `${tmpl.title}`,
+    desc: `${choice.label} - ${csq.memory || choice.desc}`
+  });
+
+  // Delayed consequence scheduling
+  if (csq.delayed) {
+    scheduleCausalTrigger(state, {
+      delayMinutes: csq.delayed.delayMinutes,
+      title: csq.delayed.title,
+      action: csq.delayed.action,
+      data: {
+        storyId: story.id,
+        targetStage: csq.delayed.data?.targetStage,
+        ...csq.delayed.data
+      }
+    });
+  }
+
+  // Stage transition or resolution
+  let narrativeOutcome = [`You chose: "${choice.label}".`, choice.desc];
+  if (csq.memory) narrativeOutcome.push(csq.memory);
+
+  if (csq.resolved || choice.resolved) {
+    story.resolved = true;
+    story.outcomeState = csq.outcomeState || choice.outcomeState || 'resolved';
+    story.resolutionSummary = csq.memory || choice.desc;
+    state.stories.history.push({
+      id: story.id,
+      templateId: story.templateId,
+      title: tmpl.title,
+      resolvedClock: state.clock,
+      playerParticipated: true,
+      outcomeState: story.outcomeState,
+      summary: story.resolutionSummary
+    });
+    if (state.stories.history.length > (D.MAX_STORY_HISTORY || 40)) {
+      state.stories.history.shift();
+    }
+    // Remove from active list
+    state.stories.active = state.stories.active.filter((s) => s.id !== story.id);
+    narrativeOutcome.push(`Storyline Resolved: ${story.outcomeState.replace(/_/g, ' ')}.`);
+
+    // Check achievement for story resolution
+    checkStoryAchievements(state);
+  } else if (csq.nextStage || choice.nextStage) {
+    const nextStId = csq.nextStage || choice.nextStage;
+    const nextDef = tmpl.stages.find((s) => s.id === nextStId);
+    if (nextDef) {
+      story.stageId = nextStId;
+      story.stageEnteredClock = state.clock;
+      story.stageDeadline = state.clock + (nextDef.durationDays || 3) * 1440;
+      story.log.push({
+        clock: state.clock,
+        event: `Progressed to: ${nextDef.title}`,
+        desc: nextDef.summary
+      });
+      narrativeOutcome.push(`The situation progresses to: "${nextDef.title}".`);
+    }
+  }
+
+  return {
+    title: `${tmpl.title}: Decision`,
+    narrative: narrativeOutcome
+  };
+}
+
+export function checkStoryAchievements(state) {
+  ensurePhase4(state);
+  ensurePhase5(state);
+  const achs = state.achievements;
+  const unlock = (id) => {
+    if (achs.unlocked[id]) return;
+    const def = D.ACHIEVEMENTS.find((a) => a.id === id);
+    if (!def) return;
+    achs.unlocked[id] = { clock: state.clock, date: formatDateOnly(state.clock) };
+    achs.history.push({ id, clock: state.clock, date: formatDateOnly(state.clock), name: def.name, category: def.category });
+    recordChronicle(state, {
+      category: 'achievement',
+      title: `Achievement: ${def.name}`,
+      desc: def.desc
+    });
+    NOTES.push(`Achievement Unlocked: ${def.name}!`);
+  };
+
+  const resolvedCount = (state.stories.history || []).filter((h) => h.playerParticipated).length;
+  if (resolvedCount >= 1) unlock('first_story_resolution');
+  if (resolvedCount >= 3) unlock('storyteller_legend');
+}
+
+export function getDiscoveredStories(state) {
+  ensurePhase5(state);
+  return (state.stories.active || []).filter((s) => state.stories.discovered[s.id]);
+}
+
+export function getStoriesAtLocation(state, locationId) {
+  ensurePhase5(state);
+  return (state.stories.active || []).filter((s) => s.location === locationId);
+}
+
+export function getStoriesForNpc(state, npcId) {
+  ensurePhase5(state);
+  return (state.stories.active || []).filter((s) => s.participants && s.participants.includes(npcId));
 }
 
 function doJobWork(state) {
@@ -2159,6 +2651,8 @@ export function execute(state, action, opts = {}) {
     case 'org_contribute': res = doOrgContribute(state, action.id, action.contribId); break;
     case 'competition_enter': res = doCompetitionEnter(state, action.id, action.strategyId); break;
     case 'career_mentorship': res = doCareerMentorship(state, action.npc); break;
+    case 'story_decision': res = doStoryDecision(state, action.storyId, action.choiceId); break;
+    case 'story_discover': res = doStoryDiscover(state, action.storyId); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
