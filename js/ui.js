@@ -228,24 +228,38 @@ export function createApp(root, deps) {
         ${away ? `<section class="panel"><h2>Elsewhere in the Metropolis</h2><ul class="plain">${away}</ul><p class="hint">Open World for travel and locations.</p></section>` : ''}`;
     }
     if (app.homeTab === 'family') {
-      const fam = s.family || { spouse: null, children: [] };
+      const fam = s.family || { spouse: null, children: [], heirlooms: [], generation: 1 };
       const house = s.housing && D.PROPERTIES[s.housing.primaryHome] ? D.PROPERTIES[s.housing.primaryHome] : D.PROPERTIES.rented_room;
-      if (!fam.spouse && (!fam.children || !fam.children.length)) {
+      if (!fam.spouse && (!fam.children || !fam.children.length) && (!fam.heirlooms || !fam.heirlooms.length) && (!fam.lineage || !fam.lineage.length)) {
         return `${tabs}<section class="panel"><h2>Family</h2><p>Pithe has no family in the Harbor Quarter yet, and this version of the world has no family members to meet.</p><p class="hint">Where Pithe comes from: ${esc(bgOf(s).circumstance)}</p></section>`;
       }
       const spouseHtml = fam.spouse
         ? `<div class="action-main"><strong>Spouse: ${esc(fam.spouse.name)}</strong><p>Married on ${esc(fam.spouse.weddingDate)}</p></div>
            <div class="row">${house.maxOccupants > 1 + fam.children.length ? `<button class="btn primary" data-action="do" data-kind="family_action" data-family-type="have_child">Have Child</button>` : `<p class="hint">Current home (${esc(house.name)}) is full. Move to a larger residence to grow family.</p>`}</div>`
-        : `<p>Pithe is not currently married. Develop close relationships with romantic partners to propose marriage.</p>`;
+        : `<p>${esc(s.character.name)} is not currently married. Develop close relationships with romantic partners to propose marriage.</p>`;
 
-      const childrenHtml = fam.children.length
-        ? `<ul class="plain">${fam.children.map((ch) => `<li><strong>${esc(ch.name)}</strong> (Age ${ch.age}) - Born: ${esc(ch.birthDate)}. Affection: ${ch.relationshipScore}/100</li>`).join('')}</ul>
+      const childrenHtml = fam.children && fam.children.length
+        ? `<ul class="plain">${fam.children.map((ch) => `<li><strong>${esc(ch.name)}</strong> (Age ${ch.age}, ${esc(D.getLifeStage(ch.age).name)}) - Born: ${esc(ch.birthDate)}. Affection: ${ch.relationshipScore}/100. ${ch.educationPath ? `Studying: ${esc(D.CHILD_EDUCATION_PATHS[ch.educationPath]?.name || ch.educationPath)}` : ''}</li>`).join('')}</ul>
            <button class="btn primary" data-action="do" data-kind="family_action" data-family-type="parenting">Family Time & Parenting (2h)</button>`
         : `<p>No children in household.</p>`;
 
+      const heirloomsHtml = fam.heirlooms && fam.heirlooms.length
+        ? `<ul class="plain">${fam.heirlooms.map((h) => `<li><strong>${esc(h.name)}</strong> (Value: ${h.baseValue})<br><small>${esc(h.significance)} Current keeper: ${esc(h.currentOwner)} (Gen ${h.originGeneration})</small></li>`).join('')}</ul>`
+        : `<p>No consecrated family heirlooms yet.</p>`;
+
+      const successors = R.getEligibleSuccessors(s);
+      const successionHtml = successors.length
+        ? `<p class="hint">Eligible successors ready to continue the family story:</p>
+           <ul class="actions">${successors.map((succ) => `<li class="action"><div class="action-main"><strong>${esc(succ.name)}</strong> (${esc(succ.stage)}, ${succ.type})<p>${esc(succ.personality)}. Education: ${esc(succ.educationPath)}</p></div><button class="btn primary" data-action="open-succession" data-id="${succ.id}">Review Succession</button></li>`).join('')}</ul>`
+        : `<p class="hint">Succession requires an adult successor (children reaching age 18 or married partner).</p>`;
+
       return `${tabs}<div class="cols">
         <section class="panel"><h2>Household & Spouse</h2>${spouseHtml}</section>
-        <section class="panel"><h2>Children & Family</h2>${childrenHtml}</section>
+        <section class="panel"><h2>Children & Family (Gen ${fam.generation})</h2>${childrenHtml}</section>
+      </div>
+      <div class="cols">
+        <section class="panel"><h2>Cherished Heirlooms</h2>${heirloomsHtml}</section>
+        <section class="panel"><h2>Generational Succession</h2>${successionHtml}</section>
       </div>
       <section class="panel"><h2>Primary Residence</h2>
         <p><strong>${esc(house.name)}</strong> at ${esc(D.LOCATIONS[house.location]?.name || house.location)}</p>
@@ -337,7 +351,7 @@ export function createApp(root, deps) {
   }
 
   function journalView(s) {
-    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'stories' ? 'on' : ''}" data-action="tab" data-tab="stories" aria-pressed="${app.journalTab === 'stories'}">Stories</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
+    const tabs = `<div class="tabs pill-row" role="group" aria-label="Journal sections"><button class="tab ${app.journalTab === 'entries' ? 'on' : ''}" data-action="tab" data-tab="entries" aria-pressed="${app.journalTab === 'entries'}">Entries</button><button class="tab ${app.journalTab === 'stories' ? 'on' : ''}" data-action="tab" data-tab="stories" aria-pressed="${app.journalTab === 'stories'}">Stories</button><button class="tab ${app.journalTab === 'family_history' ? 'on' : ''}" data-action="tab" data-tab="family_history" aria-pressed="${app.journalTab === 'family_history'}">Family Lineage</button><button class="tab ${app.journalTab === 'chronicle' ? 'on' : ''}" data-action="tab" data-tab="chronicle" aria-pressed="${app.journalTab === 'chronicle'}">Life Chronicle</button><button class="tab ${app.journalTab === 'world_memory' ? 'on' : ''}" data-action="tab" data-tab="world_memory" aria-pressed="${app.journalTab === 'world_memory'}">World Lore & Rumors</button><button class="tab ${app.journalTab === 'history' ? 'on' : ''}" data-action="tab" data-tab="history" aria-pressed="${app.journalTab === 'history'}">Activity history</button></div>`;
     if (app.journalTab === 'stories') {
       const activeStories = (s.stories?.active || []).filter((st) => s.stories?.discovered?.[st.id]);
       const historyStories = [...(s.stories?.history || [])].reverse();
@@ -370,6 +384,37 @@ export function createApp(root, deps) {
     if (app.journalTab === 'history') {
       const items = [...s.log].reverse();
       return `${tabs}<section class="panel"><h2>Activity history</h2>${items.length ? `<ul class="history">${items.map((l) => `<li><span class="when">${esc(R.formatClock(l.clock))}</span> <strong>${esc(l.title)}</strong>${l.narrative.map((t) => `<p class="story">${esc(t)}</p>`).join('')}${l.notes.length ? `<small>${esc(l.notes.join(' '))}</small>` : ''}${l.changes.length ? `<small>${esc(l.changes.join('; '))}</small>` : ''}</li>`).join('')}</ul>` : '<p>No activity yet. Things you do in the world are recorded here automatically.</p>'}</section>`;
+    }
+    if (app.journalTab === 'family_history') {
+      const fam = s.family || {};
+      const lineage = [...(fam.lineage || [])].reverse();
+      const oral = [...(fam.oralHistory || [])];
+      const verified = oral.filter((o) => o.verified);
+      const lore = oral.filter((o) => !o.verified);
+      const ledger = [...(fam.ledger || [])].reverse();
+
+      const lineageHtml = lineage.length
+        ? `<ul class="history">${lineage.map((anc) => `<li><div class="attr-top"><strong>${esc(anc.name)}</strong><span class="tag">Generation ${anc.generation}</span></div><small>Retired: ${esc(anc.retiredDate)} at Age ${anc.finalAge}</small><p class="story">${esc(anc.legacySummary)}</p></li>`).join('')}</ul>`
+        : '<p>You are the founding generation of this lineage in the Metropolis.</p>';
+
+      const verifiedHtml = verified.length
+        ? `<ul class="history">${verified.map((v) => `<li><div class="attr-top"><strong>${esc(v.title)}</strong><span class="tag">${esc(v.category)}</span></div><small>Source: ${esc(v.source)}</small><p class="story">${esc(v.text)}</p></li>`).join('')}</ul>`
+        : '<p>No verified family records documented yet.</p>';
+
+      const loreHtml = lore.length
+        ? `<ul class="actions">${lore.map((l) => `<li class="action"><div class="action-main"><strong>${esc(l.title)}</strong> <span class="tag warn">Oral Rumor</span><p>${esc(l.text)}</p><small>Source: ${esc(l.source)}</small></div><button class="btn primary" data-action="do" data-kind="family_action" data-family-type="investigate_family_mystery" data-oral-id="${l.id}">Investigate Lore</button></li>`).join('')}</ul>`
+        : '<p>No unverified oral mysteries or legends currently circulating.</p>';
+
+      const ledgerHtml = ledger.length
+        ? `<ul class="plain">${ledger.map((l) => `<li><strong>Gen ${l.generation} -> Gen ${l.generation + 1}</strong>: ${esc(l.predecessor)} to ${esc(l.successor)} on ${esc(l.date)}.<br><small>Transferred: ${l.netMoney} money, ${l.propertiesTransferred} properties, ${l.businessesTransferred} businesses, ${l.heirloomsTransferred} heirlooms.</small></li>`).join('')}</ul>`
+        : '<p>No generational estate transfers recorded yet.</p>';
+
+      return `${tabs}<section class="panel"><h2>Ancestral Lineage & Generations</h2>${lineageHtml}</section>
+        <div class="cols">
+          <section class="panel"><h2>Verified Family History</h2>${verifiedHtml}</section>
+          <section class="panel"><h2>Oral Lore & Unresolved Mysteries</h2>${loreHtml}</section>
+        </div>
+        <section class="panel"><h2>Generational Inheritance Ledger</h2>${ledgerHtml}</section>`;
     }
     if (app.journalTab === 'chronicle') {
       const chron = [...(s.chronicle || [])].reverse();
@@ -969,7 +1014,7 @@ export function createApp(root, deps) {
   function readAction(el) {
     const d = el.dataset;
     const a = { kind: d.kind };
-    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId', 'storyId', 'choiceId']) if (d[k] !== undefined) a[k] = d[k];
+    for (const k of ['id', 'to', 'npc', 'topic', 'item', 'interactType', 'romanceType', 'familyType', 'manageType', 'childName', 'skillId', 'specId', 'strategyId', 'contribId', 'storyId', 'choiceId', 'oralId', 'heirId', 'templateKey']) if (d[k] !== undefined) a[k] = d[k];
     return a;
   }
 
@@ -998,6 +1043,39 @@ export function createApp(root, deps) {
     else if (a === 'dismiss') { app.report = null; app.reveal = '.viewtitle'; render(); }
     else if (a === 'open-talk') { app.talkNpc = el.dataset.npc; app.view = 'world'; render(); }
     else if (a === 'close-talk') { app.talkNpc = null; render(); }
+    else if (a === 'open-succession') {
+      const succId = el.dataset.id;
+      const prev = R.previewSuccession(app.state, succId);
+      if (!prev.ok) {
+        app.report = { ok: false, title: 'Succession Unavailable', narrative: [prev.error], notes: [], changes: [] };
+        render();
+        return;
+      }
+      app.confirmDlg = {
+        title: `Confirm Generational Succession: ${prev.successor.name}`,
+        lines: [
+          `Passing the torch will conclude ${prev.predecessorName}'s active life chapter and begin Generation ${prev.nextGeneration} as ${prev.successor.name}.`,
+          `Transferred assets & heritage:`,
+          ...prev.breakdown.transferred.map((t) => `* ${t}`),
+          `Independent successor identity:`,
+          ...prev.breakdown.notTransferred.map((t) => `* ${t}`)
+        ],
+        confirmLabel: `Pass the Torch to ${prev.successor.name}`,
+        run: () => {
+          const res = R.retireAndSucceed(app.state, succId, true);
+          if (res.ok) {
+            app.report = { ok: true, title: res.title, narrative: res.narrative, notes: [`Now playing ${app.state.character.name} (Generation ${app.state.family.generation}).`], changes: [] };
+            app.reveal = '.report';
+            render();
+            persist();
+          } else {
+            app.report = { ok: false, title: 'Succession Error', narrative: [res.error], notes: [], changes: [] };
+            render();
+          }
+        }
+      };
+      render();
+    }
     else if (a === 'tab') { app.journalTab = el.dataset.tab; render(); }
     else if (a === 'toggle-integration') { app.state.settings.integration = !app.state.settings.integration; render(); persist(); }
     else if (a === 'export') { const fname = `tap-protocol-save-${R.localDateStr()}.json`; deps.download(fname, deps.exportJson(app.state)); app.exportMsg = `Export started: ${fname}. Your browser saves it to its usual download location. If nothing arrives, check the browser's downloads list or its permission to download files.`; app.reveal = '[data-msg-export]'; render(); }
