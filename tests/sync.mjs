@@ -337,7 +337,8 @@ await test('a Secret / service_role key in config is refused: cloud sync stays o
 });
 
 await test('secret keys: no service-role / secret key anywhere in the shipped files', async () => {
-  const fs = await import('node:fs'), path = await import('node:path'); const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+  const fs = await import('node:fs'), path = await import('node:path'), { fileURLToPath } = await import('node:url');
+  const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const files = ['index.html', 'sw.js', 'manifest.webmanifest', ...fs.readdirSync(path.join(root, 'js')).map((f) => 'js/' + f)];
   for (const f of files) { const t = fs.readFileSync(path.join(root, f), 'utf8'); if (f !== 'js/cloud.js') ok(!/service_role|sb_secret_/i.test(t), f + ' mentions a secret key');   // cloud.js holds the guard that REFUSES such keys, so it names them
     ok(!/sb_secret_[A-Za-z0-9_-]{16,}/.test(t), f + ' contains a secret-key-looking value'); ok(!/eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\./.test(t), f + ' contains a JWT-looking key'); }
