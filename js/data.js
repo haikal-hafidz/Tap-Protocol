@@ -275,6 +275,139 @@ export const NPCS = {
   }
 };
 
+// ==============================================================================
+// PHASE 6 - LEGACY & GENERATIONS DATA DEFINITIONS
+// ==============================================================================
+
+export const MAX_FAMILY_MEMORIES = 60;
+export const MAX_ORAL_HISTORIES = 40;
+export const MAX_HEIRLOOMS = 20;
+
+export const CHILD_EDUCATION_PATHS = {
+  arts_humanities: {
+    id: 'arts_humanities',
+    name: 'Arts & Humanities Curriculum',
+    desc: 'Literature, philosophy, and creative expression.',
+    primarySkill: 'writing',
+    secondarySkill: 'design',
+    costPerTerm: 120
+  },
+  stem_engineering: {
+    id: 'stem_engineering',
+    name: 'Science & Technical Foundations',
+    desc: 'Mathematics, programming logic, and systems thinking.',
+    primarySkill: 'programming',
+    secondarySkill: 'research',
+    costPerTerm: 150
+  },
+  civics_commerce: {
+    id: 'civics_commerce',
+    name: 'Civic Engagement & Enterprise',
+    desc: 'Practical economics, communication, and community leadership.',
+    primarySkill: 'negotiation',
+    secondarySkill: 'conversation',
+    costPerTerm: 110
+  },
+  athletics_wellness: {
+    id: 'athletics_wellness',
+    name: 'Physical Conditioning & Athletics',
+    desc: 'Endurance, athletic discipline, and teamwork.',
+    primarySkill: 'fitness',
+    secondarySkill: 'observation',
+    costPerTerm: 90
+  }
+};
+
+export const HEIRLOOM_TEMPLATES = {
+  pocket_watch: {
+    name: 'Engraved Pocket Watch',
+    significance: 'Precision timepiece marking decades of devotion and punctuality.',
+    baseValue: 250
+  },
+  first_edition_tome: {
+    name: 'Annotated First Edition Tome',
+    significance: 'A scholarly work inscribed with generational observations and margins.',
+    baseValue: 320
+  },
+  silver_fountain_pen: {
+    name: 'Craftsman Silver Fountain Pen',
+    significance: 'Fine writing instrument used to sign pivotal agreements and manuscripts.',
+    baseValue: 280
+  },
+  bronze_compass: {
+    name: 'Maritime Brass Compass',
+    significance: "Navigational heirloom keeping the family grounded through life's storms.",
+    baseValue: 210
+  },
+  artisan_pendant: {
+    name: 'Handcrafted Harbor Stone Pendant',
+    significance: 'Local artisan pendant worn on major family wedding and celebration days.',
+    baseValue: 240
+  }
+};
+
+export const INITIAL_ORAL_HISTORIES = [
+  {
+    id: 'oral_arrival_roots',
+    title: 'The Great Arrival in Harbor Quarter',
+    category: 'ancestry',
+    type: 'verified_event',
+    verified: true,
+    isRumor: false,
+    text: 'The founding generation arrived at Harbor Quarter in March 2030, seeking purposeful life and community.',
+    source: 'Family Bible & Registry'
+  },
+  {
+    id: 'oral_hidden_journal',
+    title: 'The Legend of the Waterfront Archive',
+    category: 'lore',
+    type: 'family_rumor',
+    verified: false,
+    isRumor: true,
+    text: 'A whispered rumor that an early ancestor safeguarded an uncataloged handwritten journal within the Metropolitan Library archives.',
+    source: 'Neighborhood Oldtimer Rumor'
+  }
+];
+
+export const NPC_FAMILY_DYNAMICS = {
+  mira: {
+    partnerId: null,
+    partnerName: null,
+    children: [],
+    familyGoal: 'Balance demanding design agency career with warm household life'
+  },
+  dani: {
+    partnerId: null,
+    partnerName: null,
+    children: [],
+    familyGoal: 'Build an enduring generational legacy around the artisanal cafe'
+  },
+  teo: {
+    partnerId: null,
+    partnerName: null,
+    children: [],
+    familyGoal: 'Keep ancestral merchant traditions alive while supporting his growing kin'
+  },
+  chloe: {
+    partnerId: null,
+    partnerName: null,
+    children: [],
+    familyGoal: 'Nurture technical curiosity in younger generation of city engineers'
+  },
+  elena: {
+    partnerId: null,
+    partnerName: null,
+    children: [],
+    familyGoal: 'Sustain scholarly excellence across academic generations'
+  },
+  julian: {
+    partnerId: null,
+    partnerName: null,
+    children: [],
+    familyGoal: 'Instill dedication to maritime conservation and athletics in family'
+  }
+};
+
 export const QUEST = {
   id: 'menu',
   name: 'The Missing Menu',
@@ -614,14 +747,18 @@ export const BUSINESS_TYPES = {
 };
 
 export const LIFE_STAGES = [
-  { id: 'young_adult', name: 'Young Adult', minAge: 16, maxAge: 29 },
-  { id: 'adult', name: 'Adult', minAge: 30, maxAge: 49 },
-  { id: 'mature_adult', name: 'Mature Adult', minAge: 50, maxAge: 64 },
-  { id: 'senior', name: 'Senior', minAge: 65, maxAge: 999 }
+  { id: 'infant', name: 'Infant', minAge: 0, maxAge: 3, isAdult: false, canWork: false, canStudyHigher: false },
+  { id: 'child', name: 'Child', minAge: 4, maxAge: 12, isAdult: false, canWork: false, canStudyHigher: false },
+  { id: 'teenager', name: 'Teenager', minAge: 13, maxAge: 17, isAdult: false, canWork: false, canStudyHigher: false },
+  { id: 'young_adult', name: 'Young Adult', minAge: 18, maxAge: 29, isAdult: true, canWork: true, canStudyHigher: true },
+  { id: 'adult', name: 'Adult', minAge: 30, maxAge: 49, isAdult: true, canWork: true, canStudyHigher: true },
+  { id: 'older_adult', name: 'Older Adult', minAge: 50, maxAge: 64, isAdult: true, canWork: true, canStudyHigher: true },
+  { id: 'senior', name: 'Senior', minAge: 65, maxAge: 999, isAdult: true, canWork: true, canStudyHigher: true }
 ];
 
 export function getLifeStage(age) {
-  return LIFE_STAGES.find((s) => age >= s.minAge && age <= s.maxAge) || LIFE_STAGES[0];
+  const a = Math.max(0, Number(age) || 0);
+  return LIFE_STAGES.find((s) => a >= s.minAge && a <= s.maxAge) || LIFE_STAGES[LIFE_STAGES.length - 1];
 }
 
 // ==============================================================================
@@ -1298,7 +1435,15 @@ export const ACHIEVEMENTS = [
 
   // Phase 5 Narrative Milestones
   { id: 'first_story_resolution', category: 'Narrative', name: 'Living Chronicle', desc: 'Directly participate in the resolution of an emergent neighborhood storyline.', icon: 'world', hidden: false },
-  { id: 'storyteller_legend', category: 'Narrative', name: 'Architect of Destinies', desc: 'Resolve three or more multi-stage emergent storylines across the city.', icon: 'world', hidden: false }
+  { id: 'storyteller_legend', category: 'Narrative', name: 'Architect of Destinies', desc: 'Resolve three or more multi-stage emergent storylines across the city.', icon: 'world', hidden: false },
+
+  // Phase 6 Generational & Legacy Milestones
+  { id: 'family_foundation', category: 'Family', name: 'Family Foundation', desc: 'Establish an enduring family household through marriage or committed partnership.', icon: 'people', hidden: false },
+  { id: 'next_generation', category: 'Family', name: 'Nurtured Horizon', desc: 'Raise a child through their formative years to reach adulthood.', icon: 'people', hidden: false },
+  { id: 'family_heirloom', category: 'Legacy', name: 'Keeper of the Mantle', desc: 'Consecrate and preserve a cherished family heirloom with documented provenance.', icon: 'progress', hidden: false },
+  { id: 'family_historian', category: 'Legacy', name: 'Keeper of Truths', desc: 'Investigate oral lore and verify a historical family mystery.', icon: 'journal', hidden: false },
+  { id: 'torchbearer', category: 'Succession', name: 'Torchbearer', desc: 'Successfully transition the family simulation to an eligible successor generation.', icon: 'progress', hidden: false },
+  { id: 'dynasty_builder', category: 'Succession', name: 'Endless Story', desc: 'Sustain your lineage across multiple generations with enduring honor and assets.', icon: 'world', hidden: true }
 ];
 
 // ==============================================================================

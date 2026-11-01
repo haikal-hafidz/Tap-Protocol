@@ -138,6 +138,7 @@ export function createCharacter(o = {}) {
   ensureWorldMemory(state);
   ensurePhase4(state);
   ensurePhase5(state);
+  ensurePhase6(state);
   return { ok: true, state, intro: bg.circumstance };
 }
 
@@ -177,6 +178,7 @@ export function migrateState(s) {
   ensureWorldMemory(s);
   ensurePhase4(s);
   ensurePhase5(s);
+  ensurePhase6(s);
   s.version = D.SAVE_VERSION;
   return s;
 }
@@ -531,7 +533,40 @@ function processCalendarTransitions(state) {
     if (state.family?.children) {
       for (const child of state.family.children) {
         child.age = (child.age || 0) + 1;
-        NOTES.push(`${child.name} celebrated a birthday and is now ${child.age} years old.`);
+        const prevStage = child.stage || 'infant';
+        const newStage = D.getLifeStage(child.age).id;
+        child.stage = newStage;
+        NOTES.push(`${child.name} celebrated a birthday and is now ${child.age} years old (${D.getLifeStage(child.age).name}).`);
+
+        // Formative milestone tracking
+        if (prevStage !== newStage) {
+          recordChronicle(state, {
+            category: 'family',
+            title: `${child.name} reached ${D.getLifeStage(child.age).name}`,
+            desc: `${child.name} transitioned into the ${D.getLifeStage(child.age).name} stage of life.`
+          });
+          recordMemory(state, {
+            type: 'family_milestone',
+            title: `${child.name} reached ${D.getLifeStage(child.age).name}`,
+            entities: ['pithe', `child_${child.id}`],
+            location: state.location,
+            importance: D.MEMORY_IMPORTANCE.NOTABLE,
+            visibility: 'public',
+            context: `${child.name} is growing up gracefully in the family household.`
+          });
+        }
+
+        // Emerging traits & interests as children mature
+        if (child.age === 4 && (!child.interests || !child.interests.length)) {
+          child.interests = ['drawing', 'outdoor play'];
+          child.personality = 'curious and bright';
+        } else if (child.age === 13 && child.interests.length < 3) {
+          child.interests.push('music', 'literature');
+          child.personality = 'thoughtful and observant';
+        } else if (child.age === 18 && !child.isAdult) {
+          child.isAdult = true;
+          NOTES.push(`${child.name} has officially come of age and reached adulthood (18 years old)!`);
+        }
       }
     }
   }
@@ -799,6 +834,7 @@ export function processWorldSimulation(state) {
   processEmergentWorldEvents(state);
   processCausalTriggers(state);
   processEmergentStories(state);
+  processNpcFamilyDynamics(state);
 }
 
 export function processLocationDevelopment(state) {
@@ -1086,6 +1122,55 @@ export function verifyRumor(state, memoryId) {
   });
 
   return { ok: true, memory: mem };
+}
+
+export function processNpcFamilyDynamics(state) {
+  ensurePhase6(state);
+  ensureWorldMemory(state);
+  const curDay = dayKey(state.clock);
+  const curWeek = weekStart(curDay);
+
+  if (state.lastNpcFamilyWeek === curWeek) return;
+  state.lastNpcFamilyWeek = curWeek;
+
+  for (const [npcId, dyn] of Object.entries(state.npcFamilySim)) {
+    // If not married/partnered, check if they formed a bond with someone in their circle
+    if (!dyn.partnerId) {
+      const prof = D.NPC_PROFILES[npcId];
+      if (prof && prof.circle && prof.circle.length) {
+        for (const candidateId of prof.circle) {
+          const edgeKey = [npcId, candidateId].sort().join('|');
+          const edge = state.npcNetwork && state.npcNetwork[edgeKey];
+          if (edge && edge.affinity >= 70 && edge.trust >= 60) {
+            dyn.partnerId = candidateId;
+            dyn.partnerName = D.NPCS[candidateId]?.name || candidateId;
+            const milestone = `${D.NPCS[npcId]?.name || npcId} and ${dyn.partnerName} formed an official long-term partnership.`;
+            recordMemory(state, {
+              type: 'npc_family',
+              title: milestone,
+              entities: [npcId, candidateId],
+              location: prof.workplace,
+              importance: D.MEMORY_IMPORTANCE.NOTABLE,
+              visibility: 'public',
+              context: milestone
+            });
+            break;
+          }
+        }
+      }
+    } else {
+      // Age existing NPC children
+      for (const ch of dyn.children) {
+        if (!ch.lastYearProcessed) ch.lastYearProcessed = dateParts(state.clock).year;
+        const curY = dateParts(state.clock).year;
+        if (curY > ch.lastYearProcessed) {
+          ch.age = (ch.age || 0) + (curY - ch.lastYearProcessed);
+          ch.lastYearProcessed = curY;
+          ch.stage = D.getLifeStage(ch.age).name;
+        }
+      }
+    }
+  }
 }
 
 export function processAutonomousNpcLives(state) {
@@ -2072,11 +2157,44 @@ export function ensureRelationships(state) {
 
 export function ensureFamily(state) {
   if (!state.family) {
-    state.family = {
-      spouse: null,
-      children: [],
-      tree: []
+    state.family = {};
+  }
+  const f = state.family;
+  if (typeof f.generation !== 'number') f.generation = 1;
+  if (!Array.isArray(f.lineage)) f.lineage = [];
+  if (f.spouse === undefined) f.spouse = null;
+  if (!Array.isArray(f.children)) f.children = [];
+  if (!Array.isArray(f.relatives)) f.relatives = [];
+  if (!Array.isArray(f.heirlooms)) f.heirlooms = [];
+  if (!f.will) {
+    f.will = {
+      designatedHeirId: null,
+      cashDistribution: 'primary_heir', // 'primary_heir' | 'split_children' | 'charity'
+      propertyDistribution: 'primary_heir',
+      businessDistribution: 'primary_heir',
+      lastUpdated: state.clock || 0
     };
+  }
+  if (!Array.isArray(f.oralHistory)) {
+    f.oralHistory = (D.INITIAL_ORAL_HISTORIES || []).map((h) => ({ ...h }));
+  }
+  if (!Array.isArray(f.ledger)) f.ledger = [];
+  if (!Array.isArray(f.tree)) f.tree = [];
+}
+
+export function ensurePhase6(state) {
+  ensureFamily(state);
+  if (!state.npcFamilySim) {
+    state.npcFamilySim = {};
+    for (const [id, dyn] of Object.entries(D.NPC_FAMILY_DYNAMICS || {})) {
+      state.npcFamilySim[id] = {
+        partnerId: dyn.partnerId,
+        partnerName: dyn.partnerName,
+        children: [...dyn.children],
+        familyGoal: dyn.familyGoal,
+        lastMilestoneClock: state.clock || 0
+      };
+    }
   }
 }
 
@@ -2254,16 +2372,19 @@ function doRomanceAction(state, npcId, actionType) {
   return { error: 'Unknown romance action.' };
 }
 
-function doFamilyAction(state, actionType, childName) {
+function doFamilyAction(state, actionType, payload = {}) {
   ensureFamily(state);
   ensureHousing(state);
+  ensurePhase6(state);
+
   if (actionType === 'have_child') {
-    if (!state.family.spouse) return { error: 'Starting a family requires a married spouse.' };
+    if (!state.family.spouse) return { error: 'Starting a family requires a married spouse or committed partner.' };
     const prop = D.PROPERTIES[state.housing.primaryHome];
     if (prop && prop.maxOccupants <= 1 + state.family.children.length) {
       return { error: `Your current residence (${prop.name}) does not have enough rooms for a child. Move to a larger apartment or house.` };
     }
-    const name = String(childName || 'Pithe Jr').trim();
+    const childName = typeof payload === 'string' ? payload : (payload.childName || 'Pithe Jr');
+    const name = String(childName).trim() || 'Pithe Jr';
     const newChild = {
       id: nextId(state),
       name,
@@ -2271,6 +2392,17 @@ function doFamilyAction(state, actionType, childName) {
       birthDate: formatDateOnly(state.clock),
       birthYear: dateParts(state.clock).year,
       age: 0,
+      stage: 'infant',
+      isAdult: false,
+      educationPath: null,
+      interests: [],
+      personality: 'sweet and calm',
+      attributes: {
+        strength: 2, agility: 2, endurance: 2, intelligence: 2,
+        perception: 2, willpower: 2, communication: 2, empathy: 2,
+        influence: 2, creativity: 2, management: 2, adaptability: 2
+      },
+      skills: {},
       relationshipScore: 80
     };
     state.family.children.push(newChild);
@@ -2281,13 +2413,22 @@ function doFamilyAction(state, actionType, childName) {
       title: `Welcomed Child: ${name}`,
       desc: `Celebrated the joyful birth and arrival of your child, ${name}, into the family household.`
     });
+    recordMemory(state, {
+      type: 'family_birth',
+      title: `Child ${name} born to ${state.character.name} and ${state.family.spouse.name}`,
+      entities: ['pithe', state.family.spouse.npcId, `child_${newChild.id}`],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.MAJOR,
+      visibility: 'public',
+      context: `The family household celebrated the birth of ${name}.`
+    });
     NOTES.push(`Joyful news! Welcomed ${name} into the family!`);
 
     return {
       title: `Child Welcomed: ${name}`,
       narrative: [
         `A healthy, beautiful baby was born to your family!`,
-        `Pithe and ${state.family.spouse.name} welcomed ${name} with overwhelming love and joy.`
+        `${state.character.name} and ${state.family.spouse.name} welcomed ${name} with overwhelming love and joy.`
       ]
     };
   } else if (actionType === 'parenting') {
@@ -2298,6 +2439,15 @@ function doFamilyAction(state, actionType, childName) {
     state.needs.satiety = Math.max(0, state.needs.satiety - 6);
     for (const ch of state.family.children) {
       ch.relationshipScore = clamp((ch.relationshipScore || 80) + 5, 0, 100);
+      if (ch.age >= 4) {
+        // Child learns from parent interaction
+        if (!ch.skills) ch.skills = {};
+        const sks = Object.keys(state.character.skills || {});
+        if (sks.length) {
+          const sk = sks[ch.id % sks.length];
+          ch.skills[sk] = (ch.skills[sk] || 0) + 1;
+        }
+      }
     }
     grantSkillExp(state, 'cooking', 8);
     grantExp(state, 12);
@@ -2307,17 +2457,557 @@ function doFamilyAction(state, actionType, childName) {
     return {
       title: 'Family Time & Parenting',
       narrative: [
-        `You read bedtime stories, cooked nutritious meals, and helped your children with homework.`,
+        `You read bedtime stories, cooked nutritious meals, and guided your children with life lessons.`,
         `The home filled with laughter and mutual affection.`
       ]
     };
+  } else if (actionType === 'educate_child') {
+    const childId = Number(payload.childId);
+    const pathId = payload.pathId;
+    const child = state.family.children.find((c) => c.id === childId);
+    if (!child) return { error: 'Child not found in family registry.' };
+    if (child.age < 4) return { error: `${child.name} is still an infant and too young for formal education.` };
+    const path = D.CHILD_EDUCATION_PATHS[pathId];
+    if (!path) return { error: 'Unknown educational curriculum.' };
+    if (state.money < path.costPerTerm) return { error: `Enrolling ${child.name} requires ${path.costPerTerm} money (you have ${state.money}).` };
+
+    transact(state, { amount: -path.costPerTerm, category: 'education', desc: `Tuition for ${child.name} (${path.name})` });
+    child.educationPath = path.id;
+    child.skills[path.primarySkill] = (child.skills[path.primarySkill] || 0) + 2;
+    child.skills[path.secondarySkill] = (child.skills[path.secondarySkill] || 0) + 1;
+    child.relationshipScore = clamp((child.relationshipScore || 80) + 4, 0, 100);
+
+    recordChronicle(state, {
+      category: 'education',
+      title: `${child.name} Enrolled in ${path.name}`,
+      desc: `Provided tuition and support for ${child.name}'s studies in ${path.name}.`
+    });
+    NOTES.push(`Enrolled ${child.name} in ${path.name}.`);
+
+    return {
+      title: `Education: ${child.name}`,
+      narrative: [
+        `You registered ${child.name} for the ${path.name}.`,
+        `${child.name} enthusiastically started lessons in ${path.desc}.`
+      ]
+    };
+  } else if (actionType === 'designate_heirloom') {
+    const templateKey = payload.templateKey || 'pocket_watch';
+    const customName = payload.name;
+    const tmpl = D.HEIRLOOM_TEMPLATES[templateKey];
+    if (!tmpl) return { error: 'Unknown heirloom template.' };
+    if (state.family.heirlooms.length >= D.MAX_HEIRLOOMS) return { error: 'Family heirloom vault is at maximum capacity.' };
+    const cost = tmpl.baseValue;
+    if (state.money < cost) return { error: `Acquiring and consecrating this heirloom requires ${cost} money.` };
+
+    transact(state, { amount: -cost, category: 'heirloom', desc: `Commissioned family heirloom: ${tmpl.name}` });
+    const heirloom = {
+      id: nextId(state),
+      name: customName ? String(customName).trim() : tmpl.name,
+      originGeneration: state.family.generation,
+      originOwner: state.character.name,
+      currentOwner: state.character.name,
+      dateAcquired: formatDateOnly(state.clock),
+      significance: tmpl.significance,
+      baseValue: tmpl.baseValue,
+      provenance: [
+        {
+          clock: state.clock,
+          date: formatDateOnly(state.clock),
+          generation: state.family.generation,
+          owner: state.character.name,
+          event: `Consecrated as a permanent family heirloom by ${state.character.name}.`
+        }
+      ]
+    };
+    state.family.heirlooms.push(heirloom);
+
+    recordChronicle(state, {
+      category: 'legacy',
+      title: `Designated Heirloom: ${heirloom.name}`,
+      desc: `Consecrated ${heirloom.name} with documented family provenance for future generations.`
+    });
+    recordMemory(state, {
+      type: 'heirloom_consecration',
+      title: `${state.character.name} established family heirloom: ${heirloom.name}`,
+      entities: ['pithe'],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.NOTABLE,
+      visibility: 'public',
+      context: `The heirloom carries deep family history: ${heirloom.significance}`
+    });
+    checkAchievements(state);
+    NOTES.push(`Consecrated ${heirloom.name} as a family heirloom.`);
+
+    return {
+      title: `Heirloom Consecrated: ${heirloom.name}`,
+      narrative: [
+        `You formally designated ${heirloom.name} as an enduring family heirloom.`,
+        `Its provenance and historical significance are now etched in the family annals.`
+      ]
+    };
+  } else if (actionType === 'draft_will') {
+    const heirId = payload.heirId ? Number(payload.heirId) : null;
+    const cashDist = payload.cashDistribution || 'primary_heir';
+    const propDist = payload.propertyDistribution || 'primary_heir';
+    const bizDist = payload.businessDistribution || 'primary_heir';
+
+    state.family.will = {
+      designatedHeirId: heirId,
+      cashDistribution: cashDist,
+      propertyDistribution: propDist,
+      businessDistribution: bizDist,
+      lastUpdated: state.clock
+    };
+
+    recordChronicle(state, {
+      category: 'legal',
+      title: 'Drafted Family Will & Testament',
+      desc: 'Officially notarized estate distribution guidelines for future generations.'
+    });
+    NOTES.push('Successfully drafted and notarized family will and estate terms.');
+
+    return {
+      title: 'Family Will & Testament Updated',
+      narrative: [
+        'You met with estate solicitors and formally notarized your last will and testament.',
+        'Asset transfer provisions and succession instructions have been legally documented.'
+      ]
+    };
+  } else if (actionType === 'share_family_story') {
+    const storyTitle = payload.title || 'Tales of Early Struggles';
+    const storyText = payload.text || 'Recounted stories of arriving in Harbor Quarter and overcoming early adversity.';
+
+    const entry = {
+      id: `oral_${nextId(state)}`,
+      title: String(storyTitle).trim(),
+      category: 'family_tradition',
+      type: 'personal_recollection',
+      verified: true,
+      isRumor: false,
+      text: String(storyText).trim(),
+      source: `${state.character.name} (Gen ${state.family.generation})`
+    };
+    state.family.oralHistory.push(entry);
+    if (state.family.oralHistory.length > D.MAX_ORAL_HISTORIES) state.family.oralHistory.shift();
+
+    for (const ch of state.family.children) {
+      ch.relationshipScore = clamp((ch.relationshipScore || 80) + 6, 0, 100);
+    }
+    grantSkillExp(state, 'conversation', 12);
+    advance(state, 60);
+
+    recordMemory(state, {
+      type: 'family_story',
+      title: `Oral history shared: ${entry.title}`,
+      entities: ['pithe'],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.FLEETING,
+      visibility: 'public',
+      context: entry.text
+    });
+    NOTES.push(`Shared family story "${entry.title}" with descendants.`);
+
+    return {
+      title: `Family Oral History: ${entry.title}`,
+      narrative: [
+        `Gathered around the table, you passed down oral traditions and memories of earlier days.`,
+        `The younger generation listened intently, absorbing the values and heritage of their family.`
+      ]
+    };
+  } else if (actionType === 'resolve_family_conflict') {
+    const targetNpcId = payload.npcId;
+    if (!targetNpcId) return { error: 'Specify family member or relative.' };
+    const rel = state.relationships[targetNpcId];
+    if (!rel) return { error: 'Relationship record not found.' };
+
+    rel.trust = clamp(rel.trust + 15, -100, 100);
+    rel.affinity = clamp(rel.affinity + 12, 0, 100);
+    state.relations[targetNpcId] = rel.trust;
+    advance(state, 90);
+
+    recordChronicle(state, {
+      category: 'family',
+      title: `Family Reconciliation with ${D.NPCS[targetNpcId]?.name || targetNpcId}`,
+      desc: 'Had an open and vulnerable conversation that healed historical misunderstandings.'
+    });
+    NOTES.push(`Healed family rift with ${D.NPCS[targetNpcId]?.name || targetNpcId}.`);
+
+    return {
+      title: 'Family Reconciliation',
+      narrative: [
+        `You sat down for a candid, heartfelt dialogue with ${D.NPCS[targetNpcId]?.name || targetNpcId}.`,
+        'Longstanding tensions melted away, replaced by renewed kinship and mutual respect.'
+      ]
+    };
+  } else if (actionType === 'investigate_family_mystery') {
+    const oralId = payload.oralId;
+    const item = state.family.oralHistory.find((o) => o.id === oralId);
+    if (!item) return { error: 'Oral history mystery not found.' };
+    if (item.verified) return { error: 'This family history item is already verified.' };
+
+    item.verified = true;
+    item.isRumor = false;
+    item.type = 'verified_event';
+    item.source += ' (Independently Confirmed)';
+
+    recordChronicle(state, {
+      category: 'legacy',
+      title: `Verified Family Mystery: ${item.title}`,
+      desc: `Uncovered historical proof confirming the truth of ${item.title}.`
+    });
+    recordMemory(state, {
+      type: 'historical_discovery',
+      title: `Family mystery verified: ${item.title}`,
+      entities: ['pithe'],
+      location: state.location,
+      importance: D.MEMORY_IMPORTANCE.MAJOR,
+      visibility: 'public',
+      context: item.text
+    });
+    grantExp(state, 40);
+    grantSkillExp(state, 'research', 25);
+    checkAchievements(state);
+    NOTES.push(`Confirmed and verified family mystery: ${item.title}!`);
+
+    return {
+      title: `Historical Mystery Unlocked: ${item.title}`,
+      narrative: [
+        `Through archival inquiry and interviewing senior citizens, you verified the historical truth of the oral legend!`,
+        `The family mystery is now an authenticated milestone in your lineage's history.`
+      ]
+    };
   }
+
   return { error: 'Unknown family action.' };
+}
+
+// ---------------------------------------------------------------- PHASE 6: INHERITANCE & SUCCESSION ENGINE
+
+export function getEligibleSuccessors(state) {
+  ensureFamily(state);
+  const eligible = [];
+
+  // 1. Adult children (age >= 18)
+  for (const ch of state.family.children) {
+    if (ch.age >= 18 || ch.isAdult) {
+      eligible.push({
+        type: 'child',
+        id: ch.id,
+        name: ch.name,
+        age: ch.age,
+        stage: D.getLifeStage(ch.age).name,
+        relationshipScore: ch.relationshipScore || 80,
+        personality: ch.personality || 'independent',
+        interests: ch.interests || [],
+        educationPath: ch.educationPath ? (D.CHILD_EDUCATION_PATHS[ch.educationPath]?.name || ch.educationPath) : 'Self-taught',
+        attributes: ch.attributes || {},
+        skills: ch.skills || {}
+      });
+    }
+  }
+
+  // 2. Spouse / committed partner
+  if (state.family.spouse) {
+    eligible.push({
+      type: 'spouse',
+      id: state.family.spouse.npcId,
+      name: state.family.spouse.name,
+      age: 28, // contemporary adult partner
+      stage: 'Adult',
+      relationshipScore: 90,
+      personality: 'devoted partner and confidant',
+      interests: ['household management', 'community'],
+      educationPath: 'Metropolitan Academy',
+      attributes: {
+        strength: 3, agility: 3, endurance: 3, intelligence: 4,
+        perception: 4, willpower: 4, communication: 5, empathy: 5,
+        influence: 4, creativity: 3, management: 4, adaptability: 4
+      },
+      skills: { conversation: 3, cooking: 2, negotiation: 2 }
+    });
+  }
+
+  return eligible;
+}
+
+export function executeInheritanceTransfer(state, successorId, willOverrides = {}) {
+  ensureFamily(state);
+  ensureHousing(state);
+  ensureBusiness(state);
+
+  const will = { ...state.family.will, ...willOverrides };
+  const prevCharName = state.character.name;
+  const prevClock = state.clock;
+  const initialMoney = state.money;
+  const initialHousing = [...(state.housing.owned || [])];
+  const initialBusinesses = [...(state.business.owned || [])];
+  const initialInventory = { ...state.inventory };
+  const initialHeirlooms = [...state.family.heirlooms];
+
+  // Prevent duplicate inheritance processing
+  const existingLedgerEntry = state.family.ledger.find(
+    (l) => l.generation === state.family.generation && l.predecessor === prevCharName
+  );
+  if (existingLedgerEntry) {
+    return { ok: false, error: 'Inheritance has already been settled for this generation.' };
+  }
+
+  // Find successor details
+  const eligible = getEligibleSuccessors(state);
+  const successor = eligible.find((e) => String(e.id) === String(successorId));
+  if (!successor) {
+    return { ok: false, error: 'Selected successor is not eligible for generational inheritance.' };
+  }
+
+  // 1. Calculate and transfer liquid wealth
+  let inheritedMoney = 0;
+  if (will.cashDistribution === 'primary_heir') {
+    inheritedMoney = initialMoney;
+  } else if (will.cashDistribution === 'split_children') {
+    const childCount = Math.max(1, state.family.children.length);
+    inheritedMoney = Math.floor(initialMoney / childCount);
+  } else if (will.cashDistribution === 'charity') {
+    inheritedMoney = Math.floor(initialMoney * 0.25); // 75% endowed to community
+  }
+
+  // Estate administrative fees / transfer tax (5% standard)
+  const estateFee = Math.floor(inheritedMoney * 0.05);
+  const netMoney = Math.max(20, inheritedMoney - estateFee);
+
+  // 2. Transfer properties
+  let inheritedHousing = [];
+  if (will.propertyDistribution === 'primary_heir') {
+    inheritedHousing = [...initialHousing];
+  } else {
+    // Keep at least primary home or rent
+    inheritedHousing = initialHousing.slice(0, 1);
+  }
+
+  // 3. Transfer businesses
+  let inheritedBusinesses = [];
+  if (will.businessDistribution === 'primary_heir') {
+    inheritedBusinesses = initialBusinesses.map((b) => ({ ...b, founder: prevCharName }));
+  }
+
+  // 4. Transfer heirlooms with updated provenance
+  const transferredHeirlooms = initialHeirlooms.map((h) => {
+    const updated = { ...h, currentOwner: successor.name };
+    updated.provenance = [
+      ...h.provenance,
+      {
+        clock: prevClock,
+        date: formatDateOnly(prevClock),
+        generation: state.family.generation + 1,
+        owner: successor.name,
+        event: `Bequeathed to ${successor.name} upon generational succession from ${prevCharName}.`
+      }
+    ];
+    return updated;
+  });
+
+  // 5. Record persistent transaction in Family Ledger
+  const ledgerRecord = {
+    id: nextId(state),
+    generation: state.family.generation,
+    predecessor: prevCharName,
+    successor: successor.name,
+    clock: prevClock,
+    date: formatDateOnly(prevClock),
+    grossMoney: initialMoney,
+    estateFee,
+    netMoney,
+    propertiesTransferred: inheritedHousing.length,
+    businessesTransferred: inheritedBusinesses.length,
+    heirloomsTransferred: transferredHeirlooms.length,
+    distributionTerms: will
+  };
+  state.family.ledger.push(ledgerRecord);
+
+  // Return transfer payload for succession applicator
+  return {
+    ok: true,
+    successor,
+    ledgerRecord,
+    assets: {
+      money: netMoney,
+      housing: inheritedHousing,
+      businesses: inheritedBusinesses,
+      inventory: initialInventory,
+      heirlooms: transferredHeirlooms
+    }
+  };
+}
+
+export function previewSuccession(state, successorId) {
+  const eligible = getEligibleSuccessors(state);
+  const successor = eligible.find((e) => String(e.id) === String(successorId));
+  if (!successor) return { ok: false, error: 'Successor not eligible.' };
+
+  const will = state.family.will || {};
+  let expectedMoney = state.money;
+  if (will.cashDistribution === 'split_children') {
+    expectedMoney = Math.floor(state.money / Math.max(1, state.family.children.length));
+  } else if (will.cashDistribution === 'charity') {
+    expectedMoney = Math.floor(state.money * 0.25);
+  }
+  const estateFee = Math.floor(expectedMoney * 0.05);
+  const netMoney = Math.max(20, expectedMoney - estateFee);
+
+  return {
+    ok: true,
+    currentGeneration: state.family.generation,
+    nextGeneration: state.family.generation + 1,
+    predecessorName: state.character.name,
+    successor,
+    breakdown: {
+      transferred: [
+        `Net liquid funds: ${netMoney} money (gross ${expectedMoney} less ${estateFee} estate fee)`,
+        `Family heirlooms: ${state.family.heirlooms.length} items with updated lineage provenance`,
+        `Real estate properties: ${(state.housing.owned || []).length} owned holdings`,
+        `Commercial enterprises: ${(state.business.owned || []).length} active ventures`,
+        `Family records, memories, and ancestral oral lore`,
+        `World locations, relationships, and neighborhood reputation`
+      ],
+      notTransferred: [
+        `Predecessor personal attributes and specific skill levels (successor develops independently)`,
+        `Predecessor personal jobs and enrolled courses (successor must seek their own career)`,
+        `Predecessor personal energy, satiety, and health condition`
+      ]
+    }
+  };
+}
+
+export function retireAndSucceed(state, successorId, confirmed = false) {
+  if (!confirmed) {
+    return { ok: false, error: 'Succession requires explicit confirmation.' };
+  }
+
+  const transfer = executeInheritanceTransfer(state, successorId);
+  if (!transfer.ok) return transfer;
+
+  const { successor, ledgerRecord, assets } = transfer;
+  const pred = state.character;
+
+  // 1. Snapshot predecessor legacy into family lineage
+  const predecessorRecord = {
+    generation: state.family.generation,
+    name: pred.name,
+    finalAge: pred.age,
+    background: pred.background,
+    trait: pred.trait,
+    level: pred.level,
+    reputation: { ...state.reputation },
+    retiredClock: state.clock,
+    retiredDate: formatDateOnly(state.clock),
+    legacySummary: `${pred.name} guided Generation ${state.family.generation} to Level ${pred.level}, securing ${assets.housing.length} properties and ${assets.businesses.length} enterprises.`
+  };
+  state.family.lineage.push(predecessorRecord);
+
+  // 2. Record historical chronicle & world memory
+  recordChronicle(state, {
+    category: 'succession',
+    title: `Generation ${state.family.generation + 1} Commences: ${successor.name}`,
+    desc: `${pred.name} retired with honor, passing the mantle of family leadership to ${successor.name}.`
+  });
+
+  recordMemory(state, {
+    type: 'generational_succession',
+    title: `${successor.name} succeeded ${pred.name} as family head`,
+    entities: ['pithe', successor.name],
+    location: state.location,
+    importance: D.MEMORY_IMPORTANCE.HISTORICAL,
+    visibility: 'public',
+    context: `A historic generational torchbearer transition took place in the Metropolis.`
+  });
+
+  // 3. Update active character state with successor independent identity
+  const baseAttrs = {
+    strength: 3, agility: 3, endurance: 3, intelligence: 3,
+    perception: 3, willpower: 3, communication: 3, empathy: 3,
+    influence: 3, creativity: 3, management: 3, adaptability: 3
+  };
+  // Nurture bonuses from successor upbringing
+  if (successor.attributes) {
+    for (const [k, v] of Object.entries(successor.attributes)) {
+      if (baseAttrs[k]) baseAttrs[k] = Math.min(10, baseAttrs[k] + (v > 2 ? 1 : 0));
+    }
+  }
+
+  const initialSkills = {};
+  for (const [skId, skDef] of Object.entries(D.SKILLS)) {
+    const inheritedLvl = (successor.skills && successor.skills[skDef.id]) ? Math.min(3, successor.skills[skDef.id]) : 0;
+    initialSkills[skDef.id] = { level: Math.max(1, inheritedLvl), exp: 0 };
+  }
+
+  state.character = {
+    name: successor.name,
+    age: successor.age || 20,
+    appearance: `Carries the dignity and legacy of Generation ${state.family.generation + 1}`,
+    background: 'creator',
+    trait: successor.personality.includes('curious') ? 'curious' : 'ambitious',
+    difficulty: pred.difficulty || 'hardcore',
+    level: 1,
+    exp: 0,
+    attributes: baseAttrs,
+    attrProgress: Object.fromEntries(D.ATTRIBUTES.map((a) => [a.id, 0])),
+    skills: initialSkills
+  };
+
+  // 4. Transfer assets & reset personal needs
+  state.money = assets.money;
+  state.inventory = assets.inventory;
+  state.housing.owned = assets.housing;
+  state.business.owned = assets.businesses;
+  state.family.heirlooms = assets.heirlooms;
+
+  state.needs = { energy: 100, satiety: 100, health: 100 };
+  state.career.currentJob = null;
+  state.career.shiftsWorked = 0;
+  state.career.experienceDays = 0;
+  state.education.enrolled = [];
+
+  // 5. Update family tree & increment generation
+  state.family.generation += 1;
+  state.family.will = {
+    designatedHeirId: null,
+    cashDistribution: 'primary_heir',
+    propertyDistribution: 'primary_heir',
+    businessDistribution: 'primary_heir',
+    lastUpdated: state.clock
+  };
+
+  // If successor was a child, remove them from children list as they are now protagonist
+  if (successor.type === 'child') {
+    state.family.children = state.family.children.filter((c) => String(c.id) !== String(successor.id));
+  } else if (successor.type === 'spouse') {
+    state.family.spouse = null;
+  }
+
+  // 6. Check achievements
+  checkAchievements(state);
+
+  NOTES.push(`The mantle has passed! You now guide ${successor.name} (Generation ${state.family.generation}).`);
+
+  return {
+    ok: true,
+    title: `The Torch is Passed: Generation ${state.family.generation}`,
+    narrative: [
+      `${pred.name} stepped back into a venerable elder role, leaving behind an accomplished chronicle.`,
+      `With heartfelt support, ${successor.name} steps forward to lead the next chapter of this endless story.`
+    ]
+  };
 }
 
 // ---------------------------------------------------------------- activities
 function activityBlock(state, id) {
   const d = D.ACTIVITIES[id];
+  const stage = D.getLifeStage(state.character.age);
+  if (!stage.isAdult) {
+    if (id === 'shift_market' || id === 'shift_cafe') {
+      return 'Children and teenagers cannot work adult labor shifts.';
+    }
+  }
   if (!d.where.includes(state.location)) return `${d.name} is not possible at ${D.LOCATIONS[state.location].name}.`;
   const closed = openBlock(state, D.LOCATIONS[state.location], d.minutes);
   if (closed) return closed;
@@ -2643,7 +3333,7 @@ export function execute(state, action, opts = {}) {
     case 'business_manage': res = doBusinessManage(state, action.id, action.manageType); break;
     case 'social_interact': res = doSocialInteract(state, action.npc, action.interactType); break;
     case 'romance_action': res = doRomanceAction(state, action.npc, action.romanceType); break;
-    case 'family_action': res = doFamilyAction(state, action.familyType, action.childName); break;
+    case 'family_action': res = doFamilyAction(state, action.familyType, action.payload || action); break;
     case 'event_participate': res = doEventParticipate(state, action.id); break;
     case 'verify_rumor': res = verifyRumor(state, action.id); break;
     case 'choose_specialization': res = doChooseSpecialization(state, action.skillId, action.specId); break;
@@ -2653,6 +3343,7 @@ export function execute(state, action, opts = {}) {
     case 'career_mentorship': res = doCareerMentorship(state, action.npc); break;
     case 'story_decision': res = doStoryDecision(state, action.storyId, action.choiceId); break;
     case 'story_discover': res = doStoryDiscover(state, action.storyId); break;
+    case 'retire_and_succeed': res = retireAndSucceed(state, action.successorId, action.confirmed); break;
     default: res = { error: 'Unknown action.' };
   }
   if (res.error) return { ok: false, error: res.error };
@@ -2951,6 +3642,26 @@ export function checkAchievements(state) {
 
   // 15. scholar_degree
   if ((state.education?.qualifications || []).some((q) => q.startsWith('deg_'))) unlock('scholar_degree');
+
+  // Phase 6 Achievements
+  ensureFamily(state);
+  // 16. family_foundation
+  if (state.family?.spouse) unlock('family_foundation');
+
+  // 17. next_generation
+  if (state.family?.children?.some((ch) => ch.age >= 18 || ch.isAdult)) unlock('next_generation');
+
+  // 18. family_heirloom
+  if ((state.family?.heirlooms || []).length > 0) unlock('family_heirloom');
+
+  // 19. family_historian
+  if ((state.family?.oralHistory || []).some((o) => o.type === 'verified_event' && o.source?.includes('Confirmed'))) unlock('family_historian');
+
+  // 20. torchbearer
+  if ((state.family?.generation || 1) >= 2) unlock('torchbearer');
+
+  // 21. dynasty_builder
+  if ((state.family?.generation || 1) >= 3) unlock('dynasty_builder');
 }
 
 // ---------------------------------------------------------------- Skill Specialization Selection
