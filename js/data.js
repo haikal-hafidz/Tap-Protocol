@@ -298,3 +298,328 @@ export const EXPLORE_CLUES = {
   market: ['You learn which stalls open first and which prices change after noon.', 'A fruit seller tells you the best day to shop is Saturday, when Lantern Night discounts start.'],
   cafe: ['The chalkboard still shows a ghost of last season\'s menu under the new chalk.', 'You overhear two regulars arguing about whether cardamom belongs in tea.']
 };
+
+
+// ==============================================================================
+// PHASE 2 - MODERN LIVING WORLD DATA DEFINITIONS
+// ==============================================================================
+
+export const EXTENDED_LOCATIONS = {
+  downtown: {
+    id: 'downtown', name: 'Downtown Metropolis',
+    desc: 'Commercial core with skyscrapers, financial firms, corporate headquarters and shopping avenues.',
+    open: { days: [0, 1, 2, 3, 4, 5, 6], from: 6, to: 23, label: 'Daily 06:00-23:00' }
+  },
+  university: {
+    id: 'university', name: 'Metropolitan University',
+    desc: 'Historic stone buildings blended with modern science labs, lecture halls and student commons.',
+    open: { days: [1, 2, 3, 4, 5, 6], from: 8, to: 21, label: 'Mon-Sat 08:00-21:00' }
+  },
+  tech_park: {
+    id: 'tech_park', name: 'Innovation Hub',
+    desc: 'High-tech corporate campus featuring tech startups, incubators, research labs and co-working spaces.',
+    open: { days: [1, 2, 3, 4, 5], from: 7, to: 20, label: 'Mon-Fri 07:00-20:00' }
+  },
+  marina: {
+    id: 'marina', name: 'Bayside Marina District',
+    desc: 'Scenic waterfront promenade lined with upscale dining, luxury residences, and boardwalk cafes.',
+    open: { days: [0, 1, 2, 3, 4, 5, 6], from: 9, to: 23, label: 'Daily 09:00-23:00' }
+  }
+};
+
+export const EXTENDED_TRAVEL = {
+  'cafe|downtown': 20, 'downtown|home': 25, 'downtown|library': 15, 'downtown|market': 20,
+  'cafe|university': 25, 'home|university': 30, 'library|university': 20, 'market|university': 25, 'downtown|university': 15,
+  'cafe|tech_park': 30, 'home|tech_park': 35, 'library|tech_park': 25, 'market|tech_park': 30, 'downtown|tech_park': 15, 'tech_park|university': 15,
+  'cafe|marina': 25, 'home|marina': 30, 'library|marina': 30, 'marina|market': 25, 'downtown|marina': 15, 'marina|university': 25, 'marina|tech_park': 20
+};
+
+Object.assign(LOCATIONS, EXTENDED_LOCATIONS);
+Object.assign(TRAVEL, EXTENDED_TRAVEL);
+
+export const EXTENDED_NPCS = {
+  marcus: {
+    id: 'marcus', name: 'Marcus Vance', role: 'Venture Director',
+    desc: 'Sharp-suited investor with keen eyes and a decisive demeanor.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5], from: 8, to: 17, loc: 'downtown' },
+      { days: [5], from: 18, to: 22, loc: 'marina' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Introduce yourself', once: true,
+        text: ['"Good to meet you," Marcus nods firmly. "Time is the only asset we can never buy back."'],
+        reward: { rel: 5, skill: 'negotiation', skillExp: 8, exp: 6 } }
+    ]
+  },
+  elena: {
+    id: 'elena', name: 'Dr. Elena Rostova', role: 'University Dean',
+    desc: 'Distinguished academic passionate about lifelong learning and analytical rigor.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5], from: 9, to: 16, loc: 'university' },
+      { days: [6], from: 10, to: 14, loc: 'library' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Discuss research and education', once: true,
+        text: ['"Knowledge expands exponentially when shared," Dr. Rostova smiles warmly.'],
+        reward: { rel: 5, skill: 'research', skillExp: 8, exp: 6 } }
+    ]
+  },
+  chloe: {
+    id: 'chloe', name: 'Chloe Chen', role: 'Senior Tech Lead',
+    desc: 'Software architect with stylish glasses and developer conference stickers on her laptop.',
+    schedule: [
+      { days: [1, 2, 3, 4, 5], from: 9, to: 18, loc: 'tech_park' },
+      { days: [6, 0], from: 12, to: 18, loc: 'cafe' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Say hi and talk technology', once: true,
+        text: ['"Hey there! Working on any exciting systems?" Chloe asks brightly.'],
+        reward: { rel: 5, skill: 'programming', skillExp: 8, exp: 6 } }
+    ]
+  },
+  julian: {
+    id: 'julian', name: 'Julian Mercer', role: 'Architect & Designer',
+    desc: 'Thoughtful creative who designs sustainable residential living and community spaces.',
+    schedule: [
+      { days: [1, 2, 3, 4], from: 10, to: 17, loc: 'downtown' },
+      { days: [5, 6], from: 11, to: 19, loc: 'marina' }
+    ],
+    topics: [
+      { id: 'intro', label: 'Chat about modern architecture', once: true,
+        text: ['"The spaces we inhabit shape our daily thoughts," Julian remarks thoughtfully.'],
+        reward: { rel: 5, skill: 'design', skillExp: 8, exp: 6 } }
+    ]
+  }
+};
+
+Object.assign(NPCS, EXTENDED_NPCS);
+
+export const JOBS = {
+  corp_admin_assistant: {
+    id: 'corp_admin_assistant', title: 'Administrative Assistant', company: 'Apex Corporation',
+    industry: 'Corporate', level: 1, salary: 140, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 9, endHour: 17,
+    requirements: { qualification: null, attributes: { management: 3, communication: 3 }, skills: { writing: 1 } },
+    desc: 'Manage office schedules, communications, and executive documentation.', nextJob: 'corp_operations_manager'
+  },
+  corp_operations_manager: {
+    id: 'corp_operations_manager', title: 'Operations Manager', company: 'Apex Corporation',
+    industry: 'Corporate', level: 2, salary: 320, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 9, endHour: 17,
+    requirements: { qualification: 'cert_management', attributes: { management: 5, influence: 4 }, skills: { negotiation: 2 }, expDays: 14 },
+    desc: 'Oversee corporate workflow, team allocation, and project timelines.', nextJob: 'corp_executive'
+  },
+  corp_executive: {
+    id: 'corp_executive', title: 'Vice President of Operations', company: 'Apex Corporation',
+    industry: 'Corporate', level: 3, salary: 750, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 9, endHour: 17,
+    requirements: { qualification: 'deg_business', attributes: { management: 7, influence: 6, willpower: 5 }, skills: { negotiation: 4 }, expDays: 30 },
+    desc: 'Direct strategic corporate growth and executive leadership initiatives.'
+  },
+  tech_junior_dev: {
+    id: 'tech_junior_dev', title: 'Junior Software Engineer', company: 'NovaTech Solutions',
+    industry: 'Technology', level: 1, salary: 180, location: 'tech_park', workDays: [1, 2, 3, 4, 5], startHour: 9, endHour: 17,
+    requirements: { qualification: null, attributes: { intelligence: 4 }, skills: { programming: 2 } },
+    desc: 'Write unit tests, fix application bugs, and build responsive features.', nextJob: 'tech_senior_dev'
+  },
+  tech_senior_dev: {
+    id: 'tech_senior_dev', title: 'Senior Software Architect', company: 'NovaTech Solutions',
+    industry: 'Technology', level: 2, salary: 420, location: 'tech_park', workDays: [1, 2, 3, 4, 5], startHour: 9, endHour: 17,
+    requirements: { qualification: 'cert_software', attributes: { intelligence: 6, adaptability: 5 }, skills: { programming: 5 }, expDays: 14 },
+    desc: 'Design distributed architectures, coordinate code reviews, and lead engineering pods.', nextJob: 'tech_cto'
+  },
+  tech_cto: {
+    id: 'tech_cto', title: 'Chief Technology Officer', company: 'NovaTech Solutions',
+    industry: 'Technology', level: 3, salary: 900, location: 'tech_park', workDays: [1, 2, 3, 4, 5], startHour: 9, endHour: 17,
+    requirements: { qualification: 'deg_compsci', attributes: { intelligence: 8, management: 6, influence: 5 }, skills: { programming: 7, negotiation: 4 }, expDays: 30 },
+    desc: 'Direct technical vision, architectural standards, and engineering culture.'
+  },
+  creative_junior_designer: {
+    id: 'creative_junior_designer', title: 'Junior Visual Designer', company: 'Studio Prisma',
+    industry: 'Creative', level: 1, salary: 150, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 10, endHour: 18,
+    requirements: { qualification: null, attributes: { creativity: 4 }, skills: { design: 2 } },
+    desc: 'Craft branding assets, user interfaces, and graphic promotional kits.', nextJob: 'creative_art_director'
+  },
+  creative_art_director: {
+    id: 'creative_art_director', title: 'Art & Design Director', company: 'Studio Prisma',
+    industry: 'Creative', level: 2, salary: 350, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 10, endHour: 18,
+    requirements: { qualification: 'cert_design', attributes: { creativity: 6, empathy: 5 }, skills: { design: 5, writing: 3 }, expDays: 14 },
+    desc: 'Lead creative campaigns, oversee design systems, and manage studio productions.'
+  },
+  finance_analyst: {
+    id: 'finance_analyst', title: 'Financial Analyst', company: 'Sterling Capital Bank',
+    industry: 'Finance', level: 1, salary: 190, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 8, endHour: 16,
+    requirements: { qualification: null, attributes: { intelligence: 5, perception: 4 }, skills: { research: 2 } },
+    desc: 'Analyze balance sheets, fiscal portfolios, and macroeconomic indicators.', nextJob: 'finance_portfolio_manager'
+  },
+  finance_portfolio_manager: {
+    id: 'finance_portfolio_manager', title: 'Senior Portfolio Manager', company: 'Sterling Capital Bank',
+    industry: 'Finance', level: 2, salary: 450, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 8, endHour: 16,
+    requirements: { qualification: 'deg_finance', attributes: { intelligence: 7, willpower: 5 }, skills: { negotiation: 4, research: 5 }, expDays: 20 },
+    desc: 'Manage investment portfolios, asset allocations, and wealth strategies.'
+  },
+  health_assistant: {
+    id: 'health_assistant', title: 'Medical Clinic Assistant', company: 'Metropolitan Medical',
+    industry: 'Healthcare', level: 1, salary: 160, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 8, endHour: 16,
+    requirements: { qualification: null, attributes: { empathy: 4, endurance: 4 }, skills: { conversation: 2 } },
+    desc: 'Support clinical staff, patient intake records, and health consultations.'
+  },
+  edu_tutor: {
+    id: 'edu_tutor', title: 'Academic Tutor', company: 'Metropolitan University',
+    industry: 'Education', level: 1, salary: 150, location: 'university', workDays: [1, 2, 3, 4, 5], startHour: 10, endHour: 17,
+    requirements: { qualification: null, attributes: { intelligence: 4, communication: 4 }, skills: { research: 2 } },
+    desc: 'Guide undergraduate study sessions, review academic drafts, and host recitations.'
+  },
+  hosp_barista: {
+    id: 'hosp_barista', title: 'Artisan Barista & Lead', company: 'Harbor Roasters',
+    industry: 'Hospitality', level: 1, salary: 130, location: 'cafe', workDays: [2, 3, 4, 5, 6], startHour: 7, endHour: 15,
+    requirements: { qualification: null, attributes: { agility: 3, communication: 3 }, skills: { cooking: 2 } },
+    desc: 'Brew specialty coffee blends and manage front counter hospitality.'
+  },
+  trade_technician: {
+    id: 'trade_technician', title: 'Electronics Assembly Technician', company: 'Apex Precision Works',
+    industry: 'Manufacturing', level: 1, salary: 160, location: 'market', workDays: [1, 2, 3, 4, 5], startHour: 7, endHour: 15,
+    requirements: { qualification: null, attributes: { strength: 4, perception: 4 }, skills: { observation: 2 } },
+    desc: 'Assemble precision hardware, test circuit boards, and maintain machinery.'
+  },
+  pub_coordinator: {
+    id: 'pub_coordinator', title: 'Civic Services Coordinator', company: 'Metropolitan Civic Office',
+    industry: 'Public services', level: 1, salary: 150, location: 'downtown', workDays: [1, 2, 3, 4, 5], startHour: 8, endHour: 16,
+    requirements: { qualification: null, attributes: { empathy: 4, adaptability: 4 }, skills: { conversation: 2 } },
+    desc: 'Coordinate public community resources, municipal permits, and neighborhood outreach programs.'
+  }
+};
+
+export const EDUCATION_PROGRAMS = {
+  cert_management: {
+    id: 'cert_management', name: 'Professional Management Certificate',
+    institution: 'Metropolitan Institute of Management', location: 'downtown',
+    category: 'vocational', cost: 180, totalHoursNeeded: 30,
+    requirements: { attributes: { management: 3 } },
+    qualification: 'cert_management',
+    rewards: { skill: 'negotiation', skillExp: 25, exp: 50, attr: 'management', attrBonus: 1 },
+    desc: 'Master resource allocation, operational planning, and team leadership.'
+  },
+  cert_software: {
+    id: 'cert_software', name: 'Full-Stack Software Engineering Certificate',
+    institution: 'Tech Valley Academy', location: 'tech_park',
+    category: 'vocational', cost: 240, totalHoursNeeded: 40,
+    requirements: { attributes: { intelligence: 4 }, skills: { programming: 2 } },
+    qualification: 'cert_software',
+    rewards: { skill: 'programming', skillExp: 35, exp: 60, attr: 'intelligence', attrBonus: 1 },
+    desc: 'Intensive engineering curriculum covering modern algorithms, cloud APIs, and architecture.'
+  },
+  cert_design: {
+    id: 'cert_design', name: 'Applied UX & Visual Systems Certificate',
+    institution: 'Creative Media Institute', location: 'downtown',
+    category: 'vocational', cost: 160, totalHoursNeeded: 30,
+    requirements: { attributes: { creativity: 4 }, skills: { design: 1 } },
+    qualification: 'cert_design',
+    rewards: { skill: 'design', skillExp: 30, exp: 50, attr: 'creativity', attrBonus: 1 },
+    desc: 'Typography, responsive user experience design, and modern brand identity systems.'
+  },
+  cert_hospitality: {
+    id: 'cert_hospitality', name: 'Culinary & Hospitality Management Certificate',
+    institution: 'Metropolitan Culinary Guild', location: 'marina',
+    category: 'vocational', cost: 140, totalHoursNeeded: 24,
+    requirements: { attributes: { adaptability: 3 }, skills: { cooking: 1 } },
+    qualification: 'cert_hospitality',
+    rewards: { skill: 'cooking', skillExp: 30, exp: 40, attr: 'adaptability', attrBonus: 1 },
+    desc: 'Kitchen economics, food service standards, and upscale guest management.'
+  },
+  deg_business: {
+    id: 'deg_business', name: 'Bachelor of Business Administration',
+    institution: 'Metropolitan University', location: 'university',
+    category: 'university', cost: 600, totalHoursNeeded: 80,
+    requirements: { attributes: { intelligence: 4, management: 4 } },
+    qualification: 'deg_business',
+    rewards: { skill: 'negotiation', skillExp: 50, exp: 120, attr: 'management', attrBonus: 2 },
+    desc: 'Four-year comprehensive degree program in corporate finance and economics.'
+  },
+  deg_compsci: {
+    id: 'deg_compsci', name: 'Bachelor of Computer Science',
+    institution: 'Metropolitan University', location: 'university',
+    category: 'university', cost: 650, totalHoursNeeded: 80,
+    requirements: { attributes: { intelligence: 5 } },
+    qualification: 'deg_compsci',
+    rewards: { skill: 'programming', skillExp: 60, exp: 130, attr: 'intelligence', attrBonus: 2 },
+    desc: 'Rigorous computational theory, systems programming, and modern software architectures.'
+  },
+  deg_finance: {
+    id: 'deg_finance', name: 'Bachelor of Economics & Financial Markets',
+    institution: 'Metropolitan University', location: 'university',
+    category: 'university', cost: 620, totalHoursNeeded: 80,
+    requirements: { attributes: { intelligence: 5, perception: 4 } },
+    qualification: 'deg_finance',
+    rewards: { skill: 'research', skillExp: 50, exp: 120, attr: 'willpower', attrBonus: 2 },
+    desc: 'Advanced quantitative analysis, asset valuation, and global capital markets.'
+  }
+};
+
+export const PROPERTIES = {
+  rented_room: {
+    id: 'rented_room', name: 'Rented Room over Lane', location: 'home',
+    type: 'residential', category: 'Rental Room', rentCost: 35,
+    buyPrice: 0, maintenance: 0, canBuy: false, maxOccupants: 1,
+    desc: 'Modest room above the laundry. Cozy but basic.'
+  },
+  suburban_apartment: {
+    id: 'suburban_apartment', name: 'Modern Studio Apartment', location: 'university',
+    type: 'residential', category: 'Apartment', rentCost: 75,
+    buyPrice: 1200, maintenance: 15, canBuy: true, maxOccupants: 2,
+    desc: 'Sunlit studio apartment near the campus park with high-speed fiber internet and a modern kitchen.'
+  },
+  downtown_condo: {
+    id: 'downtown_condo', name: 'Downtown Skyline Condo', location: 'downtown',
+    type: 'residential', category: 'Apartment', rentCost: 160,
+    buyPrice: 3200, maintenance: 35, canBuy: true, maxOccupants: 3,
+    desc: 'High-rise residence with panoramic city views, fitness amenities, and 24-hour concierge services.'
+  },
+  marina_townhouse: {
+    id: 'marina_townhouse', name: 'Marina Waterfront Townhouse', location: 'marina',
+    type: 'residential', category: 'House', rentCost: 280,
+    buyPrice: 6500, maintenance: 60, canBuy: true, maxOccupants: 5,
+    desc: 'Spacious three-story luxury home on the bayside boardwalk with private terrace and boat slip.'
+  },
+  commercial_storefront: {
+    id: 'commercial_storefront', name: 'Harbor Commercial Storefront', location: 'market',
+    type: 'commercial', category: 'Commercial Property', rentCost: 110,
+    buyPrice: 2400, maintenance: 25, canBuy: true, maxOccupants: 0,
+    desc: 'Prime street-level retail space situated in the bustling marketplace with heavy foot traffic.'
+  }
+};
+
+export const BUSINESS_TYPES = {
+  coffee_kiosk: {
+    id: 'coffee_kiosk', name: 'Artisan Coffee Kiosk', industry: 'Food and beverage',
+    startupCost: 350, location: 'market',
+    baseWeeklyRevenue: 180, baseWeeklyExpenses: 80,
+    desc: 'Serve specialty coffee and breakfast pastries to morning market shoppers.'
+  },
+  tech_studio: {
+    id: 'tech_studio', name: 'Digital App & Web Consultancy', industry: 'Technology',
+    startupCost: 600, location: 'tech_park',
+    baseWeeklyRevenue: 340, baseWeeklyExpenses: 120,
+    desc: 'Develop bespoke software products, client websites, and digital cloud workflows.'
+  },
+  creative_agency: {
+    id: 'creative_agency', name: 'Brand & Creative Studio', industry: 'Creative services',
+    startupCost: 500, location: 'downtown',
+    baseWeeklyRevenue: 280, baseWeeklyExpenses: 100,
+    desc: 'Deliver visual branding, marketing collateral, and publication layouts.'
+  },
+  retail_boutique: {
+    id: 'retail_boutique', name: 'Bayside Lifestyle Retail Shop', industry: 'Retail',
+    startupCost: 900, location: 'marina',
+    baseWeeklyRevenue: 480, baseWeeklyExpenses: 210,
+    desc: 'Curated apparel, artisanal goods, and nautical home decor.'
+  }
+};
+
+export const LIFE_STAGES = [
+  { id: 'young_adult', name: 'Young Adult', minAge: 16, maxAge: 29 },
+  { id: 'adult', name: 'Adult', minAge: 30, maxAge: 49 },
+  { id: 'mature_adult', name: 'Mature Adult', minAge: 50, maxAge: 64 },
+  { id: 'senior', name: 'Senior', minAge: 65, maxAge: 999 }
+];
+
+export function getLifeStage(age) {
+  return LIFE_STAGES.find((s) => age >= s.minAge && age <= s.maxAge) || LIFE_STAGES[0];
+}
