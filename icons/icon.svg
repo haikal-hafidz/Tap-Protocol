@@ -1,9 +1,27 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
-  <rect width="512" height="512" fill="#12141b"/>
-  <rect x="46" y="46" width="420" height="420" fill="#1a1d28" stroke="#7fb0d6" stroke-width="5"/>
-  <rect x="65" y="65" width="382" height="382" fill="none" stroke="#2e3447" stroke-width="3"/>
-  <path d="M42 42h72v8H50v64h-8z M470 470h-72v-8h64v-64h8z" fill="#c4a15c"/>
-  <rect x="147" y="147" width="218" height="55" fill="#c4a15c"/>
-  <rect x="226" y="202" width="60" height="176" fill="#c4a15c"/>
-  <rect x="335" y="222" width="30" height="30" fill="#7fb0d6"/>
+  <!-- TAP Protocol Gen-Z Editorial Brand Mark: Deep Forest background, editorial double-frame, geometric contemporary T-compass monogram with terracotta and warm white accents -->
+  <rect width="512" height="512" rx="112" fill="#354B3B"/>
+  <!-- Editorial Inner Border -->
+  <rect x="40" y="40" width="432" height="432" rx="84" fill="none" stroke="#738451" stroke-width="6" opacity="0.6"/>
+  <!-- Corner Editorial Marks -->
+  <path d="M 64 104 L 64 64 L 104 64" fill="none" stroke="#E3DCCE" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 448 104 L 448 64 L 408 64" fill="none" stroke="#E3DCCE" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 64 408 L 64 448 L 104 448" fill="none" stroke="#E3DCCE" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 448 408 L 448 448 L 408 448" fill="none" stroke="#E3DCCE" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- Central Architectural Canvas -->
+  <circle cx="256" cy="256" r="168" fill="#F4F0E6"/>
+  <circle cx="256" cy="256" r="156" fill="#FFFEFC" stroke="#E3DCCE" stroke-width="3"/>
+
+  <!-- Modern Geometric TAP Protocol Brand Glyph -->
+  <!-- Top Horizontal Bar of T with dynamic offset notch -->
+  <path d="M 160 188 L 352 188 C 358 188, 362 192, 362 198 L 362 232 C 362 238, 358 242, 352 242 L 284 242 L 284 340 C 284 346, 280 350, 274 350 L 238 350 C 232 350, 228 346, 228 340 L 228 242 L 160 242 C 154 242, 150 238, 150 232 L 150 198 C 150 192, 154 188, 160 188 Z" fill="#354B3B"/>
+
+  <!-- Terracotta Accent Diamond Beacon (symbolizing Protocol & Direction) -->
+  <polygon points="328,154 350,176 328,198 306,176" fill="#BA6956"/>
+  <circle cx="328" cy="176" r="5" fill="#FFFEFC"/>
+
+  <!-- Olive Editorial Accent Block -->
+  <rect x="180" y="270" width="28" height="28" rx="6" fill="#738451"/>
+  <line x1="228" y1="284" x2="208" y2="284" stroke="#738451" stroke-width="4"/>
 </svg>

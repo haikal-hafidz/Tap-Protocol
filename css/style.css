@@ -398,3 +398,375 @@ main > .panel, main > .window, main > .report { margin-bottom: 0.9rem; }
     transition-duration: 0.001ms !important;
   }
 }
+
+/* ==========================================================================
+   Editorial UX Redesign Expansion - Typography, Scenes, Map & Mini-games
+   ========================================================================== */
+
+/* Editorial Typography Roles */
+.font-display {
+  font-family: var(--serif);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.font-heading {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+}
+
+.font-body {
+  font-family: var(--serif);
+  line-height: 1.6;
+}
+
+.font-ui {
+  font-family: var(--sans);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.font-numeric {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Scene Illustration Card */
+.scene-frame {
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--cream);
+  border: 1px solid var(--divider);
+  margin-bottom: 1.25rem;
+}
+
+.scene-graphic {
+  width: 100%;
+  height: auto;
+  display: block;
+  background: #E8E2D2;
+}
+
+.scene-caption {
+  padding: 0.85rem 1.1rem;
+  background: var(--white);
+  border-top: 1px solid var(--divider);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.scene-title {
+  font-family: var(--serif);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--forest);
+  margin: 0;
+}
+
+.scene-meta {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Character Creator & Avatar Preview */
+.creator-container {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.9fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .creator-container {
+    grid-template-columns: 1fr;
+  }
+}
+
+.creator-preview-panel {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--white);
+  border: 1px solid var(--divider);
+  border-radius: var(--r-lg);
+  padding: 1.25rem;
+  text-align: center;
+}
+
+.avatar-preview-wrap {
+  width: 180px;
+  height: 180px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.avatar-preview-wrap svg {
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-md);
+}
+
+.creator-preview-controls {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.creator-preview-controls button {
+  flex: 1;
+}
+
+.creator-tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--divider);
+}
+
+.creator-tab {
+  padding: 0.45rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 20px;
+  color: var(--muted);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.creator-tab.on {
+  background: var(--forest);
+  color: var(--white);
+}
+
+.options-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+  gap: 0.5rem;
+}
+
+.option-card {
+  border: 1px solid var(--divider);
+  background: var(--white);
+  border-radius: var(--r-sm);
+  padding: 0.6rem 0.75rem;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.option-card:hover {
+  border-color: var(--olive);
+}
+
+.option-card.selected {
+  border-color: var(--forest);
+  background: var(--cream);
+  font-weight: 700;
+}
+
+.color-swatch {
+  display: inline-block;
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  vertical-align: middle;
+  margin-right: 0.4rem;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+/* 2D Interactive Map */
+.map-viewport {
+  position: relative;
+  background: #EAE5D9;
+  border: 1px solid var(--divider);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.map-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--white);
+  border-top: 1px solid var(--divider);
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.map-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+/* Mini-games Framework */
+.minigame-container {
+  background: var(--white);
+  border: 1px solid var(--forest);
+  border-radius: var(--r-lg);
+  padding: 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.minigame-header {
+  border-bottom: 1px solid var(--divider);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.minigame-title {
+  font-family: var(--serif);
+  font-size: 1.35rem;
+  color: var(--forest);
+  margin: 0 0 0.25rem;
+}
+
+.minigame-instructions {
+  font-size: 0.88rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.minigame-stage {
+  min-height: 180px;
+  background: var(--cream);
+  border-radius: var(--r-md);
+  padding: 1.2rem;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+
+.minigame-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6rem, 1fr));
+  gap: 0.6rem;
+  width: 100%;
+}
+
+.minigame-btn {
+  padding: 0.75rem 0.5rem;
+  font-weight: 600;
+  border-radius: var(--r-sm);
+  background: var(--white);
+  border: 1px solid var(--divider);
+  cursor: pointer;
+}
+
+.minigame-btn:hover {
+  background: var(--forest);
+  color: var(--white);
+}
+
+/* Opening Experience & Main Menu */
+.main-menu-overlay {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.main-menu-card {
+  max-width: 28rem;
+  width: 100%;
+  background: var(--white);
+  border: 1px solid var(--divider);
+  border-radius: var(--r-lg);
+  padding: 2rem 1.5rem;
+  box-shadow: 0 4px 20px rgba(53, 75, 59, 0.08);
+}
+
+.main-menu-title {
+  font-family: var(--serif);
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--forest);
+  margin: 0.5rem 0 0.2rem;
+}
+
+.main-menu-tagline {
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 1.75rem;
+}
+
+.main-menu-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.main-menu-nav .btn {
+  min-height: 3rem;
+  font-size: 0.95rem;
+}
+
+/* Perk & Equipment Shop */
+.shop-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  gap: 0.85rem;
+}
+
+.perk-card {
+  background: var(--white);
+  border: 1px solid var(--divider);
+  border-left: 4px solid var(--olive);
+  border-radius: var(--r-md);
+  padding: 0.9rem 1rem;
+}
+
+.perk-card.owned {
+  border-left-color: var(--forest);
+  background: var(--cream);
+}
+
+.perk-card h3 {
+  margin: 0 0 0.25rem;
+  font-size: 1.05rem;
+}
+
+.perk-card .perk-desc {
+  font-size: 0.85rem;
+  color: var(--text);
+  margin-bottom: 0.6rem;
+}
+
+.perk-card .perk-cost {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--brass);
+}
